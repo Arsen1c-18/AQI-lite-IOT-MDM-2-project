@@ -44,12 +44,12 @@ const Layout = ({ children }) => {
             <Link to="/about" className="p-2 rounded-full hover:bg-green-100 transition-colors" title="Help">
               <HelpCircle className="w-5 h-5" />
             </Link>
-            <button className="p-2 rounded-full hover:bg-green-100 transition-colors" title="Settings">
+            <Link to="/settings" className="p-2 rounded-full hover:bg-green-100 transition-colors" title="Settings">
               <Settings className="w-5 h-5" />
-            </button>
-            <div className="w-9 h-9 ml-2 rounded-full border-2 border-green-200 bg-green-50 flex items-center justify-center">
+            </Link>
+            <Link to="/profile" className="w-9 h-9 ml-2 rounded-full border-2 border-green-200 bg-green-50 hover:bg-green-100 transition-colors flex items-center justify-center" title="Profile">
               <User className="w-5 h-5 text-text-secondary" />
-            </div>
+            </Link>
           </div>
         </header>
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Wifi, MapPin, Battery, ChevronRight, CheckCircle2, Clock } from 'lucide-react';
+import { Wifi, Cpu, Battery, ChevronRight, CheckCircle2, Clock } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const DeviceStatus = ({ lastSeen, deviceName, isOnline }) => {
@@ -34,8 +34,8 @@ const DeviceStatus = ({ lastSeen, deviceName, isOnline }) => {
             )}
           </div>
           <p className="text-sm text-text-secondary flex items-center gap-1">
-            <MapPin className="w-3 h-3" />
-            <span>Living Room</span>
+            <Cpu className="w-3 h-3" />
+            <span>ESP32-WROOM-32</span>
           </p>
         </div>
         

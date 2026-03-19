@@ -52,12 +52,20 @@ const LandingPage = () => {
           <Link to="/history" className="hover:text-accent transition-colors">History</Link>
           <Link to="/about" className="hover:text-accent transition-colors">About</Link>
         </div>
-        <Link
-          to="/dashboard"
-          className="hidden md:flex items-center gap-2 bg-accent hover:bg-green-700 text-white font-semibold px-5 py-2.5 rounded-full text-sm transition-all shadow-md shadow-green-200"
-        >
-          Open Dashboard
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link
+            to="/login"
+            className="hidden md:flex items-center text-text-primary hover:bg-green-100 font-semibold px-5 py-2.5 rounded-full text-sm transition-all"
+          >
+            Log In
+          </Link>
+          <Link
+            to="/dashboard"
+            className="hidden md:flex items-center gap-2 bg-accent hover:bg-green-700 text-white font-semibold px-5 py-2.5 rounded-full text-sm transition-all shadow-md shadow-green-200"
+          >
+            Open Dashboard
+          </Link>
+        </div>
       </nav>
 
       {/* Hero */}
