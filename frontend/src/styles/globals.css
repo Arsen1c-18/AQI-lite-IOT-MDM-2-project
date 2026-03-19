@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+@theme {
+  --color-aqi-good: #10B981;
+  --color-aqi-moderate: #F59E0B;
+  --color-aqi-sensitive: #F97316;
+  --color-aqi-unhealthy: #EF4444;
+  --color-aqi-very-unhealthy: #A855F7;
+  --color-aqi-hazardous: #831843;
+
+  --color-bg-primary: #F8FAFC;
+  --color-surface: #FFFFFF;
+  --color-text-primary: #0F172A;
+  --color-text-secondary: #64748B;
+  --color-accent: #3B82F6;
+  --color-success: #10B981;
+  --color-warning: #F59E0B;
+  --color-error: #EF4444;
+
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+@layer base {
+  html, body {
+    @apply bg-bg-primary text-text-primary font-sans antialiased m-0 p-0;
+  }
+}
+
+/* Custom Scrollbar for a more premium feel */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-300 rounded-full hover:bg-slate-400 transition-colors;
+}
+
+/* Animation utilities for the dashboard */
+@layer utilities {
+  .glassmorphism {
+    @apply bg-white/80 backdrop-blur-md border border-white/20 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)];
+  }
+  
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-br from-text-primary to-text-secondary;
+  }
+}
