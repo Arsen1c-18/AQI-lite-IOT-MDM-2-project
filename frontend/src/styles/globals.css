@@ -1,53 +1,75 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap');
 
 @theme {
-  --color-aqi-good: #10B981;
-  --color-aqi-moderate: #F59E0B;
-  --color-aqi-sensitive: #F97316;
-  --color-aqi-unhealthy: #EF4444;
-  --color-aqi-very-unhealthy: #A855F7;
-  --color-aqi-hazardous: #831843;
+  /* AQI Category Colors */
+  --color-aqi-good: #16a34a;
+  --color-aqi-moderate: #ca8a04;
+  --color-aqi-sensitive: #ea580c;
+  --color-aqi-unhealthy: #dc2626;
+  --color-aqi-very-unhealthy: #9333ea;
+  --color-aqi-hazardous: #881337;
 
-  --color-bg-primary: #F8FAFC;
-  --color-surface: #FFFFFF;
-  --color-text-primary: #0F172A;
-  --color-text-secondary: #64748B;
-  --color-accent: #3B82F6;
-  --color-success: #10B981;
-  --color-warning: #F59E0B;
-  --color-error: #EF4444;
+  /* Brand Palette - Nature Green */
+  --color-bg-primary: #f0fdf4;
+  --color-bg-secondary: #dcfce7;
+  --color-surface: #ffffff;
+  --color-text-primary: #052e16;
+  --color-text-secondary: #4b7a5e;
+  --color-accent: #16a34a;
+  --color-accent-light: #22c55e;
+  --color-accent-dark: #14532d;
+  --color-success: #16a34a;
+  --color-warning: #ca8a04;
+  --color-error: #dc2626;
 
+  /* Typography */
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 }
 
 @layer base {
   html, body {
-    @apply bg-bg-primary text-text-primary font-sans antialiased m-0 p-0;
+    background-color: #f0fdf4;
+    color: #052e16;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    margin: 0;
+    padding: 0;
   }
 }
 
-/* Custom Scrollbar for a more premium feel */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
+/* Premium Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #bbf7d0; border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: #86efac; }
 
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  @apply bg-slate-300 rounded-full hover:bg-slate-400 transition-colors;
-}
-
-/* Animation utilities for the dashboard */
 @layer utilities {
   .glassmorphism {
-    @apply bg-white/80 backdrop-blur-md border border-white/20 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)];
+    background: rgba(255, 255, 255, 0.75);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    box-shadow: 0 4px 24px 0 rgba(22, 163, 74, 0.06), 0 1px 3px rgba(0,0,0,0.05);
   }
-  
-  .text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-br from-text-primary to-text-secondary;
+
+  .glass-dark {
+    background: rgba(5, 46, 22, 0.75);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .text-gradient-green {
+    background: linear-gradient(135deg, #15803d 0%, #22c55e 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .bg-nature-gradient {
+    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 50%, #bbf7d0 100%);
   }
 }
