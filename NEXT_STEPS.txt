@@ -1,0 +1,11 @@
+# AQI Lite — Next Steps
+
+Open NEXT_STEPS.md (in this folder) or the artifact viewer for the full guide.
+
+Short version:
+1. Confirm Supabase schema (see below)
+2. Insert a device row → copy the UUID
+3. Paste keys into frontend/.env
+4. Run npm run dev and test Dashboard
+5. Flash ESP32 to POST sensor data
+6. Wire Settings/Profile pages later

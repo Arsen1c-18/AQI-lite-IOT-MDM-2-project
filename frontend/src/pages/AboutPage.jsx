@@ -51,7 +51,10 @@ const AboutPage = () => {
 
         {/* Hero */}
         <div className="text-center py-12">
-          <LeafLogo className="w-20 h-20 mx-auto mb-6" />
+          <LeafLogo className="w-20 h-20 mx-auto mb-2" />
+          <div className="text-3xl font-bold tracking-tight text-gradient-green mb-6">
+            AQI Lite
+          </div>
           <h1 className="text-4xl md:text-5xl font-bold text-text-primary tracking-tight">About AQI Lite</h1>
           <p className="text-text-secondary text-lg mt-4 leading-relaxed max-w-2xl mx-auto">
             A student-built, open-source IoT project designed to make indoor air quality monitoring

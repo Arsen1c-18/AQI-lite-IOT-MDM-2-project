@@ -25,8 +25,11 @@ const LoginPage = () => {
         className="w-full max-w-md"
       >
         <div className="glassmorphism p-8 md:p-10 rounded-[2rem] border border-green-100 shadow-xl text-center">
-          <div className="flex justify-center mb-6">
+          <div className="flex flex-col items-center justify-center mb-6 gap-2">
             <LeafLogo className="w-12 h-12" />
+            <span className="text-2xl font-bold tracking-tight text-gradient-green">
+              AQI Lite
+            </span>
           </div>
           <h1 className="text-2xl font-bold text-text-primary mb-2">Welcome Back</h1>
           <p className="text-text-secondary mb-8">Log in to manage your AQI Lite devices.</p>

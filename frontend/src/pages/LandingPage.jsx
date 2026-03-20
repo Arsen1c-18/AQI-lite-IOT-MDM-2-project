@@ -43,7 +43,7 @@ const LandingPage = () => {
         <Link to="/" className="flex items-center gap-2.5">
           <LeafLogo className="w-9 h-9" />
           <span className="text-2xl font-bold tracking-tight text-gradient-green">
-            AQI <span className="font-medium opacity-70">Lite</span>
+            AQI Lite
           </span>
         </Link>
         <div className="hidden md:flex items-center gap-6 text-sm text-text-secondary font-medium">
@@ -218,7 +218,10 @@ const LandingPage = () => {
       {/* CTA */}
       <section className="max-w-[900px] mx-auto px-6 pb-28 text-center relative z-10">
         <div className="bg-gradient-to-br from-accent to-green-600 rounded-3xl p-12 text-white shadow-2xl shadow-green-200">
-          <LeafLogo className="w-14 h-14 mx-auto mb-6" />
+          <LeafLogo className="w-14 h-14 mx-auto mb-2" />
+          <div className="text-2xl font-bold tracking-tight text-white mb-6">
+            AQI <span className="font-medium opacity-80">Lite</span>
+          </div>
           <h2 className="text-3xl md:text-4xl font-bold mb-4">Ready to monitor your air?</h2>
           <p className="text-white/80 max-w-md mx-auto mb-8 text-lg">Connect your ESP32 device and start tracking air quality in minutes. Open source, forever free.</p>
           <Link

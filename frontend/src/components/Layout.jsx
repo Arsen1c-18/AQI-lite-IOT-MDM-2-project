@@ -29,7 +29,7 @@ const Layout = ({ children }) => {
           <Link to="/" className="flex items-center gap-2.5 group">
             <LeafLogo className="w-8 h-8 group-hover:scale-110 transition-transform" />
             <span className="text-xl font-bold tracking-tight text-gradient-green">
-              AQI <span className="font-medium opacity-70">Lite</span>
+              AQI Lite
             </span>
           </Link>
 

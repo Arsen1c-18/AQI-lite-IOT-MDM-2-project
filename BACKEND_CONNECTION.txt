@@ -1,0 +1,158 @@
+================================================================
+  AQI Lite — Backend Connection Changes
+  Done on: 20 March 2026
+================================================================
+
+OVERVIEW
+--------
+Connected the React frontend to Supabase by rewriting the data
+fetching logic. The app now gracefully handles both "no API keys"
+(demo mode) and "API keys set, device connected" (live mode).
+
+================================================================
+FILES CHANGED
+================================================================
+
+1. frontend/src/supabaseClient.js
+---------------------------------
+WHAT: The Supabase client setup file.
+
+CHANGES:
+- Added a clear console warning when VITE_SUPABASE_URL or
+  VITE_SUPABASE_ANON_KEY are missing from .env
+- Exported a helper function: isSupabaseConfigured()
+  → Returns true/false so hooks know whether to bother
+    making real API calls or just use demo data
+
+WHY: Previously the app would silently fail or crash with
+     cryptic errors if .env wasn't filled in.
+
+----------------------------------------------------------------
+
+2. frontend/src/hooks/useAQIData.js  ← MAJOR REWRITE
+------------------------------------------------------
+WHAT: The main data-fetching hook used by Dashboard and
+      History pages.
+
+OLD PROBLEM:
+- Used a single nested PostgREST query to join aqi_results,
+  sensor_readings, devices, and device_status_logs all at once.
+- This only works if foreign key relationships are explicitly
+  set up in Supabase. Without them, the whole query silently
+  returns nothing.
+- Historical data did N+1 queries (one per reading row).
+- No way to tell if the UI was showing demo vs real data.
+
+NEW APPROACH — 4 Explicit Separate Queries:
+
+  Step 1 → Query aqi_results
+           Gets: calculated_aqi, category, main_pollutant,
+                 timestamp, reading_id
+
+  Step 2 → Query sensor_readings
+           Primary: uses reading_id FK from Step 1
+           Fallback: if no reading_id, uses device_id instead
+           Gets: pm25, co2, temperature, humidity
+
+  Step 3 → Query devices table
+           Gets: device_name
+
+  Step 4 → Query device_status_logs
+           Gets: status, last_seen (most recent entry)
+
+HISTORICAL DATA FIX:
+- Fetches all aqi_results for last 24h in one query
+- Collects all reading_ids into an array
+- Does ONE batch query: sensor_readings WHERE id IN (...)
+- Builds a lookup map to merge data
+- Result: 2 queries instead of N+1
+
+DEMO MODE:
+- If Supabase isn't configured OR device ID is placeholder
+  → auto-fills demo data (AQI 42, Good, fake sensor values)
+  → sets isDemo = true
+- If configured but a fetch fails
+  → logs error, falls back to demo data, sets isDemo = true
+- Exported: { latestData, historicalData, deviceInfo,
+              loading, error, isDemo, refetch }
+
+----------------------------------------------------------------
+
+3. frontend/src/hooks/useRealtime.js  ← REWRITE
+------------------------------------------------
+WHAT: Supabase WebSocket subscription hook for live updates.
+
+CHANGES:
+- Skips subscription entirely if Supabase isn't configured
+- Now listens to TWO tables (not just one):
+    aqi_results      → triggers refresh on new reading
+    device_status_logs → triggers refresh on device connect/disconnect
+- Uses a useRef for the onUpdate callback
+  → Prevents unnecessary re-subscriptions on re-renders
+- Logs "Realtime connected ✓" when WebSocket connects
+- Logs a warning if the channel errors (won't crash the app)
+
+----------------------------------------------------------------
+
+4. frontend/src/pages/Dashboard.jsx
+-------------------------------------
+WHAT: The main dashboard page.
+
+CHANGES:
+- Uses the new isDemo flag from useAQIData
+- Shows YELLOW BANNER when in demo mode:
+    "Demo mode — add your keys to frontend/.env"
+- Shows RED BANNER (with Retry button) when Supabase IS
+    configured but a fetch fails
+- Removed the full-screen error state that blocked the whole UI
+
+----------------------------------------------------------------
+
+5. frontend/.env
+-----------------
+WHAT: Environment variables file.
+
+CHANGES:
+- Updated comment header from "AuraSense" to "AQI Lite"
+- Improved inline comments to be clearer about where to find
+  each value in the Supabase dashboard
+
+================================================================
+HOW THE DATA FLOW WORKS NOW
+================================================================
+
+ESP32 Device
+    │
+    │  HTTP POST every 5 min
+    ▼
+Supabase DB
+    ├── sensor_readings  (pm25, co2, temp, humidity)
+    └── aqi_results      (calculated_aqi, category, reading_id)
+
+Supabase Realtime (WebSocket)
+    │
+    │  INSERT event fires instantly
+    ▼
+useRealtime hook  →  calls refetch()
+    │
+    ▼
+useAQIData hook
+    │  4 sequential fetch calls
+    ▼
+Dashboard / History pages update automatically
+
+================================================================
+HOW TO GO LIVE
+================================================================
+
+1. Open frontend/.env
+2. Fill in:
+      VITE_SUPABASE_URL=https://your-project.supabase.co
+      VITE_SUPABASE_ANON_KEY=your-anon-key
+      VITE_DEVICE_ID=uuid-from-devices-table
+
+3. Save the file — Vite hot-reloads automatically
+4. Check the Dashboard — yellow banner should disappear
+   and real data from your device should appear
+
+================================================================
