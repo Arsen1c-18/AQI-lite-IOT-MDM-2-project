@@ -1,12 +1,12 @@
 import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Mail, Lock } from 'lucide-react';
+import { ArrowLeft, Mail, Lock, User } from 'lucide-react';
 import LeafLogo from '../components/LeafLogo';
 import { supabase, isSupabaseConfigured } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 
-const LoginPage = () => {
+const SignupPage = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -16,15 +16,15 @@ const LoginPage = () => {
     }
   }, [user, navigate]);
 
-  const handleLogin = (e) => {
+  const handleSignup = (e) => {
     e.preventDefault();
-    // Placeholder login action leading to Profile
+    // Default flow demo or manual Supabase logic could go here
     navigate('/profile');
   };
 
-  const handleGoogleLogin = async () => {
+  const handleGoogleSignup = async () => {
     if (!isSupabaseConfigured()) {
-      console.warn('Supabase not configured, using demo login');
+      console.warn('Supabase not configured, using demo signup');
       navigate('/profile');
       return;
     }
@@ -39,8 +39,7 @@ const LoginPage = () => {
       
       if (error) throw error;
     } catch (error) {
-      console.error('Error logging in with Google:', error.message);
-      // Fallback or demo behavior
+      console.error('Error signing up with Google:', error.message);
       navigate('/profile');
     }
   };
@@ -63,10 +62,23 @@ const LoginPage = () => {
               AQI Lite
             </span>
           </div>
-          <h1 className="text-2xl font-bold text-text-primary mb-2">Welcome Back</h1>
-          <p className="text-text-secondary mb-8">Log in to manage your AQI Lite devices.</p>
+          <h1 className="text-2xl font-bold text-text-primary mb-2">Create an Account</h1>
+          <p className="text-text-secondary mb-8">Join AQI Lite and start managing your devices.</p>
 
-          <form onSubmit={handleLogin} className="space-y-4 text-left">
+          <form onSubmit={handleSignup} className="space-y-4 text-left">
+            <div>
+              <label className="block text-sm font-semibold text-text-primary mb-1.5 ml-1">Full Name</label>
+              <div className="relative">
+                <input 
+                  type="text" 
+                  placeholder="John Doe" 
+                  className="w-full bg-white border border-green-200 rounded-xl pl-11 pr-4 py-3 text-text-primary focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent transition-all"
+                  required
+                />
+                <User className="w-5 h-5 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" />
+              </div>
+            </div>
+
             <div>
               <label className="block text-sm font-semibold text-text-primary mb-1.5 ml-1">Email Address</label>
               <div className="relative">
@@ -93,16 +105,8 @@ const LoginPage = () => {
               </div>
             </div>
 
-            <div className="flex justify-between items-center px-1 py-1">
-              <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer hover:text-text-primary">
-                <input type="checkbox" className="rounded text-accent focus:ring-accent w-4 h-4 cursor-pointer" />
-                Remember me
-              </label>
-              <a href="#" className="text-sm font-semibold text-accent hover:underline">Forgot password?</a>
-            </div>
-
             <button type="submit" className="w-full bg-accent hover:bg-green-700 text-white font-bold py-3.5 rounded-xl transition-all shadow-md shadow-green-200 hover:-translate-y-0.5 mt-2">
-              Sign In
+              Sign Up
             </button>
           </form>
 
@@ -117,7 +121,7 @@ const LoginPage = () => {
 
           <button 
             type="button" 
-            onClick={handleGoogleLogin} 
+            onClick={handleGoogleSignup} 
             className="group w-full bg-white hover:bg-gray-50 border border-green-200 text-text-primary font-semibold py-3.5 rounded-xl transition-all duration-300 flex items-center justify-center gap-3 shadow-sm hover:shadow-md hover:-translate-y-1 hover:border-green-300"
           >
             <svg viewBox="0 0 24 24" className="w-5 h-5 group-hover:scale-110 transition-transform duration-300" xmlns="http://www.w3.org/2000/svg">
@@ -126,11 +130,11 @@ const LoginPage = () => {
               <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
               <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
             </svg>
-            Sign in with Google
+            Sign up with Google
           </button>
 
           <p className="mt-8 text-sm text-text-secondary">
-            Don't have an account? <Link to="/signup" className="font-semibold text-accent hover:underline">Sign up for free</Link>
+            Already have an account? <Link to="/login" className="font-semibold text-accent hover:underline">Log in</Link>
           </p>
         </div>
       </motion.div>
@@ -138,4 +142,4 @@ const LoginPage = () => {
   );
 };
 
-export default LoginPage;
+export default SignupPage;

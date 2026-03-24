@@ -1,8 +1,9 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { Cpu, Cloud, Activity, ShieldCheck, ArrowRight, Zap, Wind, Thermometer, Droplets, BarChart3 } from 'lucide-react';
+import { Cpu, Cloud, Activity, ShieldCheck, ArrowRight, Zap, Wind, Thermometer, Droplets, BarChart3, User } from 'lucide-react';
 import LeafLogo from '../components/LeafLogo';
+import { useAuth } from '../contexts/AuthContext';
 
 const FeatureCard = ({ icon: Icon, title, desc, delay, accent = false }) => (
   <motion.div
@@ -31,6 +32,8 @@ const StatBadge = ({ value, label }) => (
 );
 
 const LandingPage = () => {
+  const { user } = useAuth();
+  
   return (
     <div className="min-h-screen bg-nature-gradient overflow-hidden relative">
 
@@ -53,12 +56,21 @@ const LandingPage = () => {
           <Link to="/about" className="hover:text-accent transition-colors">About</Link>
         </div>
         <div className="flex items-center gap-3">
-          <Link
-            to="/login"
-            className="hidden md:flex items-center text-text-primary hover:bg-green-100 font-semibold px-5 py-2.5 rounded-full text-sm transition-all"
-          >
-            Log In
-          </Link>
+          {user ? (
+            <Link
+              to="/profile"
+              className="hidden md:flex items-center gap-2 text-text-primary hover:bg-green-100 font-semibold px-5 py-2.5 rounded-full text-sm transition-all"
+            >
+              <User className="w-4 h-4" /> Profile
+            </Link>
+          ) : (
+            <Link
+              to="/login"
+              className="hidden md:flex items-center text-text-primary hover:bg-green-100 font-semibold px-5 py-2.5 rounded-full text-sm transition-all"
+            >
+              Log In
+            </Link>
+          )}
           <Link
             to="/dashboard"
             className="hidden md:flex items-center gap-2 bg-accent hover:bg-green-700 text-white font-semibold px-5 py-2.5 rounded-full text-sm transition-all shadow-md shadow-green-200"

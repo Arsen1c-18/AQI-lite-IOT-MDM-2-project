@@ -1,14 +1,62 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { motion } from 'framer-motion';
+import { useAuth } from '../contexts/AuthContext';
 import { User, Mail, Calendar, MapPin, Activity, Award, LogOut, CheckCircle2, Shield, Sliders, Cloud } from 'lucide-react';
 
 const ProfilePage = () => {
   const [isAddingDevice, setIsAddingDevice] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (user && user.last_sign_in_at) {
+      const lastSignIn = new Date(user.last_sign_in_at).getTime();
+      const now = new Date().getTime();
+      // Show toast if signed in within the last 15 seconds
+      if (now - lastSignIn < 15000) {
+        setShowToast(true);
+        const timer = setTimeout(() => setShowToast(false), 5000);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [user]);
+
+  const handleSignOut = async () => {
+    if (signOut) await signOut();
+    navigate('/');
+  };
+
+  const displayName = user?.user_metadata?.full_name || 'Demo User';
+  const displayEmail = user?.email || 'demo@aqilite.io';
+  const avatarUrl = user?.user_metadata?.avatar_url;
 
   return (
     <Layout>
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="max-w-4xl mx-auto space-y-8 mb-16">
+
+        {/* Success Toast */}
+        {showToast && (
+          <motion.div 
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-[#e8fbe9] border border-green-200 text-green-800 px-6 py-4 rounded-2xl shadow-sm flex items-center gap-3"
+          >
+            <CheckCircle2 className="w-6 h-6 text-accent" />
+            <div>
+              <div className="font-bold tracking-tight">Login Successful</div>
+              <div className="text-sm opacity-90">Welcome, {displayName}. It is great to have you here!</div>
+            </div>
+            <button 
+              onClick={() => setShowToast(false)} 
+              className="ml-auto text-green-600 hover:text-green-800 font-bold px-2 py-1 rounded hover:bg-green-100 transition-colors"
+            >
+              ✕
+            </button>
+          </motion.div>
+        )}
 
         <div>
           <h1 className="text-3xl font-bold text-text-primary mb-2">My Profile</h1>
@@ -20,15 +68,19 @@ const ProfilePage = () => {
           {/* Left Column: User Card */}
           <div className="md:col-span-1 space-y-6">
             <div className="glassmorphism p-6 md:p-8 rounded-3xl border border-green-100 flex flex-col items-center text-center">
-              <div className="w-24 h-24 rounded-full bg-green-100 border-4 border-white shadow-xl flex items-center justify-center mb-4 relative">
-                <User className="w-10 h-10 text-accent" />
-                <div className="absolute bottom-0 right-0 w-6 h-6 bg-accent rounded-full border-2 border-white flex items-center justify-center">
+              <div className="w-24 h-24 rounded-full bg-green-100 border-4 border-white shadow-xl flex items-center justify-center mb-4 relative overflow-hidden">
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                ) : (
+                  <User className="w-10 h-10 text-accent" />
+                )}
+                <div className="absolute bottom-0 right-0 w-6 h-6 bg-accent rounded-full border-2 border-white flex items-center justify-center z-10">
                   <CheckCircle2 className="w-3 h-3 text-white" />
                 </div>
               </div>
-              <h2 className="text-xl font-bold text-text-primary">Demo User</h2>
+              <h2 className="text-xl font-bold text-text-primary">{displayName}</h2>
               <p className="text-sm text-text-secondary mb-6 justify-center flex items-center gap-1">
-                <Mail className="w-3.5 h-3.5" /> demo@aqilite.io
+                <Mail className="w-3.5 h-3.5" /> {displayEmail}
               </p>
               
               <div className="w-full flex justify-center px-4 py-3 bg-white/50 rounded-2xl border border-green-50 mb-2">
@@ -53,7 +105,10 @@ const ProfilePage = () => {
               </div>
             </div>
 
-            <button className="w-full flex justify-center items-center gap-2 bg-red-50 hover:bg-red-100 text-red-600 px-6 py-3.5 rounded-2xl font-bold shadow-sm transition-colors border border-red-100">
+            <button 
+              onClick={handleSignOut}
+              className="w-full flex justify-center items-center gap-2 bg-red-50 hover:bg-red-100 text-red-600 px-6 py-3.5 rounded-2xl font-bold shadow-sm transition-colors border border-red-100"
+            >
               <LogOut className="w-4 h-4" /> Sign Out
             </button>
           </div>
