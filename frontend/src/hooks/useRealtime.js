@@ -1,15 +1,16 @@
 import { useEffect, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from '../supabaseClient';
-import { DEVICE_ID } from '../utils/constants';
+import { getDeviceId, isValidDeviceId } from '../utils/deviceSettings';
 
 export const useRealtime = (onUpdate) => {
   const onUpdateRef = useRef(onUpdate);
   onUpdateRef.current = onUpdate;
 
   useEffect(() => {
-    // Don't subscribe if Supabase isn't configured
-    if (!isSupabaseConfigured() || !DEVICE_ID || DEVICE_ID === 'your-device-uuid-here') {
-      return;
+    const DEVICE_ID = getDeviceId();
+
+    if (!isSupabaseConfigured() || !isValidDeviceId(DEVICE_ID)) {
+      return; // demo mode — skip subscription
     }
 
     const channel = supabase
@@ -17,9 +18,9 @@ export const useRealtime = (onUpdate) => {
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event:  'INSERT',
           schema: 'public',
-          table: 'aqi_results',
+          table:  'aqi_results',
           filter: `device_id=eq.${DEVICE_ID}`,
         },
         (payload) => {
@@ -30,13 +31,12 @@ export const useRealtime = (onUpdate) => {
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event:  'INSERT',
           schema: 'public',
-          table: 'device_status_logs',
+          table:  'device_status_logs',
           filter: `device_id=eq.${DEVICE_ID}`,
         },
         () => {
-          // Refresh device online/offline status when a new log is inserted
           onUpdateRef.current?.();
         }
       )

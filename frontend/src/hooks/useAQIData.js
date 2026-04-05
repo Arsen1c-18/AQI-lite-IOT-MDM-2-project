@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase, isSupabaseConfigured } from '../supabaseClient';
-import { DEVICE_ID } from '../utils/constants';
+import { getDeviceId } from '../utils/deviceSettings';
 
 // ─── Demo / fallback data ─────────────────────────────────────────────────────
 const generateDemoHistory = () => {
@@ -9,43 +9,45 @@ const generateDemoHistory = () => {
     const d = new Date();
     d.setHours(d.getHours() - i);
     rows.push({
-      timestamp: d.toISOString(),
-      calculated_aqi: Math.floor(30 + Math.random() * 40),
-      pm25: parseFloat((10 + Math.random() * 15).toFixed(2)),
-      co2: parseFloat((400 + Math.random() * 60).toFixed(0)),
+      timestamp:      d.toISOString(),
+      final_aqi:      Math.floor(30 + Math.random() * 40),
+      pm25:           parseFloat((10 + Math.random() * 15).toFixed(2)),
+      co2:            parseFloat((400 + Math.random() * 60).toFixed(0)),
     });
   }
   return rows;
 };
 
 const DEMO_LATEST = {
-  aqi: 42,
-  category: 'Good',
+  aqi:           42,
+  category:      'Good',
   main_pollutant: 'PM2.5',
-  pm25: 12.5,
-  co2: 410,
-  temperature: 22.4,
-  humidity: 48,
-  timestamp: new Date().toISOString(),
+  pm25:          12.5,
+  co2:           410,
+  temperature:   22.4,
+  humidity:      48,
+  timestamp:     new Date().toISOString(),
 };
 
 const DEMO_DEVICE = {
   device_name: 'Demo Sensor (Offline)',
-  last_seen: new Date().toISOString(),
-  status: 'offline',
+  last_seen:   new Date().toISOString(),
+  status:      'offline',
 };
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 export const useAQIData = () => {
-  const [latestData, setLatestData] = useState(null);
+  const [latestData,     setLatestData]     = useState(null);
   const [historicalData, setHistoricalData] = useState([]);
-  const [deviceInfo, setDeviceInfo] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [isDemo, setIsDemo] = useState(false);
+  const [deviceInfo,     setDeviceInfo]     = useState(null);
+  const [loading,        setLoading]        = useState(true);
+  const [error,          setError]          = useState(null);
+  const [isDemo,         setIsDemo]         = useState(false);
 
   // ── Latest reading + device status ────────────────────────────────────────
   const fetchLatestData = useCallback(async () => {
+    const DEVICE_ID = getDeviceId();
+
     if (!isSupabaseConfigured() || !DEVICE_ID || DEVICE_ID === 'your-device-uuid-here') {
       setLatestData(DEMO_LATEST);
       setDeviceInfo(DEMO_DEVICE);
@@ -55,11 +57,12 @@ export const useAQIData = () => {
     }
 
     try {
-      // 1. Fetch the latest AQI result for this device
+      // 1. Latest AQI result — select result_id (PK), reading_id (FK), device_id
+      //    FIX: was selecting 'id' which doesn't exist; schema uses 'result_id' and 'reading_id'
       const { data: aqiRow, error: aqiErr } = await supabase
         .from('aqi_results')
-        .select('id, calculated_aqi, category, main_pollutant, timestamp, reading_id, device_id')
-        .eq('device_id', DEVICE_ID)
+        .select('result_id, calculated_aqi, calibrated_aqi, category, main_pollutant, timestamp, reading_id, device_id')
+        .eq('device_id', DEVICE_ID)          // ✓ device_id column exists
         .order('timestamp', { ascending: false })
         .limit(1)
         .single();
@@ -69,34 +72,37 @@ export const useAQIData = () => {
         throw aqiErr;
       }
 
-      // 2. Fetch sensor readings using the reading_id FK
+      // 2. Sensor reading via reading_id FK
+      //    FIX: was querying .eq('id', ...) — schema PK is 'reading_id'
       let sensorRow = null;
       if (aqiRow?.reading_id) {
         const { data: sr, error: srErr } = await supabase
           .from('sensor_readings')
           .select('pm25, co2, temperature, humidity')
-          .eq('id', aqiRow.reading_id)
+          .eq('reading_id', aqiRow.reading_id)   // ✓ reading_id is the PK
           .single();
         if (!srErr) sensorRow = sr;
       } else {
-        // Fallback: fetch latest sensor_reading by device_id
+        // Fallback: latest reading for device
         const { data: sr } = await supabase
           .from('sensor_readings')
           .select('pm25, co2, temperature, humidity')
-          .eq('device_id', DEVICE_ID)
+          .eq('device_id', DEVICE_ID)             // ✓ device_id column on sensor_readings
           .order('timestamp', { ascending: false })
           .limit(1)
           .single();
         sensorRow = sr;
       }
 
-      // 3. Fetch device name + latest status log
+      // 3. Device name
+      //    FIX: was querying .eq('id', DEVICE_ID) — schema PK is 'device_id'
       const { data: deviceRow } = await supabase
         .from('devices')
         .select('device_name')
-        .eq('id', DEVICE_ID)
+        .eq('device_id', DEVICE_ID)               // ✓ device_id is the PK
         .single();
 
+      // 4. Latest status log
       const { data: statusRow } = await supabase
         .from('device_status_logs')
         .select('status, last_seen')
@@ -106,20 +112,20 @@ export const useAQIData = () => {
         .single();
 
       setLatestData({
-        aqi: aqiRow.calculated_aqi,
-        category: aqiRow.category,
+        aqi:           aqiRow.calibrated_aqi ?? aqiRow.calculated_aqi,
+        category:      aqiRow.category,
         main_pollutant: aqiRow.main_pollutant,
-        pm25: sensorRow?.pm25 ?? null,
-        co2: sensorRow?.co2 ?? null,
-        temperature: sensorRow?.temperature ?? null,
-        humidity: sensorRow?.humidity ?? null,
-        timestamp: aqiRow.timestamp,
+        pm25:          sensorRow?.pm25        ?? null,
+        co2:           sensorRow?.co2         ?? null,
+        temperature:   sensorRow?.temperature ?? null,
+        humidity:      sensorRow?.humidity    ?? null,
+        timestamp:     aqiRow.timestamp,
       });
 
       setDeviceInfo({
         device_name: deviceRow?.device_name || 'AQI Lite Node',
-        last_seen: statusRow?.last_seen || aqiRow.timestamp,
-        status: statusRow?.status || 'unknown',
+        last_seen:   statusRow?.last_seen   || aqiRow.timestamp,
+        status:      statusRow?.status      || 'unknown',
       });
 
       setIsDemo(false);
@@ -127,7 +133,6 @@ export const useAQIData = () => {
     } catch (err) {
       console.error('[useAQIData] fetchLatestData error:', err.message);
       setError(err.message);
-      // Use demo data as fallback so the UI never breaks
       setLatestData(DEMO_LATEST);
       setDeviceInfo(DEMO_DEVICE);
       setIsDemo(true);
@@ -138,6 +143,8 @@ export const useAQIData = () => {
 
   // ── Historical data (last 24 h) ────────────────────────────────────────────
   const fetchHistoricalData = useCallback(async () => {
+    const DEVICE_ID = getDeviceId();
+
     if (!isSupabaseConfigured() || !DEVICE_ID || DEVICE_ID === 'your-device-uuid-here') {
       setHistoricalData(generateDemoHistory());
       return;
@@ -146,14 +153,9 @@ export const useAQIData = () => {
     try {
       const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
-      // Join aqi_results with sensor_readings to get pm25 + co2 together
       const { data, error: err } = await supabase
         .from('aqi_results')
-        .select(`
-          calculated_aqi,
-          timestamp,
-          reading_id
-        `)
+        .select('calculated_aqi, calibrated_aqi, timestamp, reading_id')  // ✓ reading_id not 'id'
         .eq('device_id', DEVICE_ID)
         .gte('timestamp', since)
         .order('timestamp', { ascending: true });
@@ -165,27 +167,28 @@ export const useAQIData = () => {
         return;
       }
 
-      // Fetch sensor data for each reading_id in one batch query
+      // Batch-fetch sensor data
+      //   FIX: was querying .in('id', readingIds) — schema PK is 'reading_id'
       const readingIds = data.map(r => r.reading_id).filter(Boolean);
       let sensorMap = {};
 
       if (readingIds.length > 0) {
         const { data: sensors } = await supabase
           .from('sensor_readings')
-          .select('id, pm25, co2')
-          .in('id', readingIds);
+          .select('reading_id, pm25, co2')          // ✓ select reading_id as the key
+          .in('reading_id', readingIds);             // ✓ filter on reading_id
 
         if (sensors) {
-          sensorMap = Object.fromEntries(sensors.map(s => [s.id, s]));
+          sensorMap = Object.fromEntries(sensors.map(s => [s.reading_id, s]));
         }
       }
 
       setHistoricalData(
         data.map(row => ({
-          timestamp: row.timestamp,
-          calculated_aqi: row.calculated_aqi,
-          pm25: sensorMap[row.reading_id]?.pm25 ?? null,
-          co2: sensorMap[row.reading_id]?.co2 ?? null,
+          timestamp:      row.timestamp,
+          final_aqi:      row.calibrated_aqi ?? row.calculated_aqi,
+          pm25:           sensorMap[row.reading_id]?.pm25 ?? null,
+          co2:            sensorMap[row.reading_id]?.co2  ?? null,
         }))
       );
     } catch (err) {
@@ -199,7 +202,6 @@ export const useAQIData = () => {
     fetchLatestData();
     fetchHistoricalData();
 
-    // Poll every 5 minutes as backup (realtime handles instant updates)
     const interval = setInterval(() => {
       fetchLatestData();
       fetchHistoricalData();

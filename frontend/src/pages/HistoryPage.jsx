@@ -50,7 +50,7 @@ const HistoryPage = () => {
     if (!historicalData) return [];
     return historicalData.map(item => ({
       time: new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      AQI: item.calculated_aqi,
+      AQI: item.final_aqi,
       PM25: item.pm25 ? parseFloat(item.pm25.toFixed(1)) : null,
       CO2: item.co2 ? parseFloat(item.co2.toFixed(0)) : null,
     }));
@@ -58,11 +58,11 @@ const HistoryPage = () => {
 
   const avgAQI = useMemo(() => {
     if (!historicalData.length) return null;
-    return Math.round(historicalData.reduce((a, b) => a + (b.calculated_aqi || 0), 0) / historicalData.length);
+    return Math.round(historicalData.reduce((a, b) => a + (b.final_aqi || 0), 0) / historicalData.length);
   }, [historicalData]);
 
-  const maxAQI = useMemo(() => historicalData.length ? Math.max(...historicalData.map(d => d.calculated_aqi || 0)) : null, [historicalData]);
-  const minAQI = useMemo(() => historicalData.length ? Math.min(...historicalData.map(d => d.calculated_aqi || 0)) : null, [historicalData]);
+  const maxAQI = useMemo(() => historicalData.length ? Math.max(...historicalData.map(d => d.final_aqi || 0)) : null, [historicalData]);
+  const minAQI = useMemo(() => historicalData.length ? Math.min(...historicalData.map(d => d.final_aqi || 0)) : null, [historicalData]);
 
   const metrics = [
     { key: 'all', label: 'All Metrics' },

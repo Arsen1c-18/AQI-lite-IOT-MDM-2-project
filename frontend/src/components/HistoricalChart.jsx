@@ -27,7 +27,7 @@ const HistoricalChart = ({ data }) => {
     if (!data) return [];
     return data.map(item => ({
       time: new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      AQI: item.calculated_aqi,
+      AQI: item.final_aqi,
       PM25: item.pm25,
       CO2: item.co2 ? Math.round(item.co2 / 10) : 0 // scaled down for visual mapping
     }));
