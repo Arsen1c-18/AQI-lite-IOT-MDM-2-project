@@ -98,6 +98,13 @@ def train(features_csv: str, alpha: float = 1.0, test_size: float = 0.2):
     print(f'\n[train] Model saved → {MODEL_PATH}')
 
     # Save metadata
+    scaler  = model.named_steps['scaler']
+    imputer = model.named_steps['imputer']
+
+    scaler_mean     = dict(zip(FEATURE_COLS, scaler.mean_.tolist()))
+    scaler_scale    = dict(zip(FEATURE_COLS, scaler.scale_.tolist()))
+    imputer_medians = dict(zip(FEATURE_COLS, imputer.statistics_.tolist()))
+
     metadata = {
         'version':      MODEL_VERSION,
         'trained_at':   datetime.now(timezone.utc).isoformat(),
@@ -110,9 +117,27 @@ def train(features_csv: str, alpha: float = 1.0, test_size: float = 0.2):
         'r2':           round(r2, 4),
         'coefficients': dict(zip(FEATURE_COLS, [round(c, 4) for c in coefs])),
         'intercept':    round(float(model.named_steps['ridge'].intercept_), 4),
+        'scaler': {
+            'mean':  {k: round(v, 6) for k, v in scaler_mean.items()},
+            'scale': {k: round(v, 6) for k, v in scaler_scale.items()},
+        },
+        'imputer_medians': {k: round(v, 6) for k, v in imputer_medians.items()},
     }
     METADATA_PATH.write_text(json.dumps(metadata, indent=2))
     print(f'[train] Metadata saved → {METADATA_PATH}')
+
+    edge_secret = {
+        "version":      MODEL_VERSION,
+        "features":     FEATURE_COLS,
+        "coefficients": metadata["coefficients"],
+        "intercept":    metadata["intercept"],
+        "scaler":       metadata["scaler"],
+        "imputer_medians": metadata["imputer_medians"]
+    }
+    SECRET_PATH = MODEL_DIR / 'edge_function_secret.json'
+    SECRET_PATH.write_text(json.dumps(edge_secret, indent=2))
+    print(f'\n[train] Run the following command to update Edge Function:')
+    print(f'  supabase secrets set CALIBRATION_MODEL_JSON="$(cat {SECRET_PATH})"')
 
     return model, metadata
 
