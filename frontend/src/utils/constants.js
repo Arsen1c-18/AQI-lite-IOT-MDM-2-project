@@ -59,6 +59,3 @@ export const getAqiInfo = (aqi) => {
   if (aqi === null || aqi === undefined) return null;
   return AQI_LEVELS.find((l) => aqi >= l.min && aqi <= l.max) || AQI_LEVELS[0];
 };
-
-// ⚠️ Replace this with your actual device UUID from Supabase
-export const DEVICE_ID = import.meta.env.VITE_DEVICE_ID || 'your-device-uuid-here';

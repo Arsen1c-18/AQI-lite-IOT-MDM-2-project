@@ -16,7 +16,7 @@ function Dashboard() {
 
   const prevAqi = useMemo(() => {
     if (historicalData && historicalData.length >= 2) {
-      return historicalData[historicalData.length - 2].calculated_aqi;
+      return historicalData[historicalData.length - 2].final_aqi;
     }
     return null;
   }, [historicalData]);
