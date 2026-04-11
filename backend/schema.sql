@@ -40,14 +40,16 @@ CREATE TABLE IF NOT EXISTS aqi_results (
     result_id      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     reading_id     UUID NOT NULL REFERENCES sensor_readings(reading_id) ON DELETE CASCADE,
     device_id      UUID NOT NULL REFERENCES devices(device_id) ON DELETE CASCADE,
-    calculated_aqi INTEGER NOT NULL,
-    category       VARCHAR(50) NOT NULL,   -- Good / Satisfactory / Moderate / Poor / Very Poor / Severe
-    main_pollutant VARCHAR(50),            -- PM2.5 | CO2
-    -- ML calibration outputs (populated after calibration pipeline runs)
-    calibrated_aqi INTEGER,               -- post-regression corrected value
-    calibration_model_version VARCHAR(20), -- e.g. 'ridge-v1'
+    calculated_aqi INTEGER NOT NULL,             -- CPCB AQI from corrected PM2.5
+    category       VARCHAR(50) NOT NULL,         -- Good / Satisfactory / Moderate / Poor / Very Poor / Severe
+    main_pollutant VARCHAR(50),                  -- PM2.5 | CO2
+    -- Hybrid calibration outputs (always populated by Edge Function hybrid-v1+)
+    corrected_pm25 DECIMAL(6,2),                 -- physics-corrected PM2.5 (humidity + temp factors)
+    calibrated_aqi INTEGER,                      -- hybrid AQI (or ML override when model is deployed)
+    calibration_model_version VARCHAR(20),        -- 'hybrid-v1' | 'ridge-v1' | null
     timestamp      TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
 
 CREATE TABLE IF NOT EXISTS device_status_logs (
     log_id    UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

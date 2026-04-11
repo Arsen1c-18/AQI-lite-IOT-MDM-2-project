@@ -61,8 +61,8 @@ export const useAQIData = () => {
       //    FIX: was selecting 'id' which doesn't exist; schema uses 'result_id' and 'reading_id'
       const { data: aqiRow, error: aqiErr } = await supabase
         .from('aqi_results')
-        .select('result_id, calculated_aqi, calibrated_aqi, category, main_pollutant, timestamp, reading_id, device_id')
-        .eq('device_id', DEVICE_ID)          // ✓ device_id column exists
+        .select('result_id, calculated_aqi, calibrated_aqi, corrected_pm25, calibration_model_version, category, main_pollutant, timestamp, reading_id, device_id')
+        .eq('device_id', DEVICE_ID)
         .order('timestamp', { ascending: false })
         .limit(1)
         .single();
@@ -112,14 +112,20 @@ export const useAQIData = () => {
         .single();
 
       setLatestData({
-        aqi:           aqiRow.calibrated_aqi ?? aqiRow.calculated_aqi,
-        category:      aqiRow.category,
+        // Hybrid-first: calibrated_aqi holds hybrid_aqi (or ML override)
+        aqi:            aqiRow.calibrated_aqi ?? aqiRow.calculated_aqi,
+        raw_aqi:        aqiRow.calculated_aqi,       // CPCB AQI before any correction
+        hybrid_aqi:     aqiRow.calibrated_aqi,       // physics-corrected AQI
+        category:       aqiRow.category,
         main_pollutant: aqiRow.main_pollutant,
-        pm25:          sensorRow?.pm25        ?? null,
-        co2:           sensorRow?.co2         ?? null,
-        temperature:   sensorRow?.temperature ?? null,
-        humidity:      sensorRow?.humidity    ?? null,
-        timestamp:     aqiRow.timestamp,
+        calibration_model: aqiRow.calibration_model_version ?? null,
+        // Raw sensor values
+        pm25:           sensorRow?.pm25        ?? null,
+        corrected_pm25: aqiRow.corrected_pm25  ?? null, // hybrid-corrected PM2.5
+        co2:            sensorRow?.co2         ?? null,
+        temperature:    sensorRow?.temperature ?? null,
+        humidity:       sensorRow?.humidity    ?? null,
+        timestamp:      aqiRow.timestamp,
       });
 
       setDeviceInfo({
@@ -155,7 +161,7 @@ export const useAQIData = () => {
 
       const { data, error: err } = await supabase
         .from('aqi_results')
-        .select('calculated_aqi, calibrated_aqi, timestamp, reading_id')  // ✓ reading_id not 'id'
+        .select('calculated_aqi, calibrated_aqi, corrected_pm25, calibration_model_version, timestamp, reading_id')
         .eq('device_id', DEVICE_ID)
         .gte('timestamp', since)
         .order('timestamp', { ascending: true });
@@ -186,7 +192,10 @@ export const useAQIData = () => {
       setHistoricalData(
         data.map(row => ({
           timestamp:      row.timestamp,
-          final_aqi:      row.calibrated_aqi ?? row.calculated_aqi,
+          final_aqi:      row.calibrated_aqi ?? row.calculated_aqi, // hybrid-first
+          raw_aqi:        row.calculated_aqi,                        // for comparison
+          corrected_pm25: row.corrected_pm25 ?? null,
+          calibration_model: row.calibration_model_version ?? null,
           pm25:           sensorMap[row.reading_id]?.pm25 ?? null,
           co2:            sensorMap[row.reading_id]?.co2  ?? null,
         }))

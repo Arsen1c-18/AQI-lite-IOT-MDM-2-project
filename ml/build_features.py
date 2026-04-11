@@ -97,6 +97,10 @@ def build_features(sensor_df: pd.DataFrame, cpcb_df: pd.DataFrame) -> pd.DataFra
     sensor_df = sensor_df.copy()
     cpcb_df   = cpcb_df.copy()
 
+    # Replace pm25=0 with NaN (sensor failure stored as 0, not a real reading)
+    sensor_df['pm25'] = sensor_df['pm25'].replace(0, float('nan'))
+
+
     sensor_df['hour'] = sensor_df['timestamp'].dt.floor('H')
     cpcb_df['hour']   = pd.to_datetime(cpcb_df['timestamp'], utc=True).dt.floor('H')
 
@@ -138,6 +142,8 @@ def main():
     parser.add_argument('--cpcb-csv',    default='data/cpcb_reference.csv')
     parser.add_argument('--out',         default='data/features.csv')
     args = parser.parse_args()
+
+    Path('data').mkdir(parents=True, exist_ok=True)
 
     # Load CPCB reference
     cpcb_path = Path(args.cpcb_csv)
