@@ -26,10 +26,11 @@ const HistoricalChart = ({ data }) => {
   const chartData = useMemo(() => {
     if (!data) return [];
     return data.map(item => ({
-      time: new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      AQI: item.final_aqi,
-      PM25: item.pm25,
-      CO2: item.co2 ? Math.round(item.co2 / 10) : 0 // scaled down for visual mapping
+      time:    new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      AQI:     item.final_aqi,          // hybrid-corrected (recommended)
+      RawAQI:  item.raw_aqi ?? null,     // unmodified baseline for comparison
+      PM25:    item.pm25,
+      CO2:     item.co2 ? Math.round(item.co2 / 10) : 0, // scaled for visual mapping
     }));
   }, [data]);
 
@@ -62,6 +63,10 @@ const HistoricalChart = ({ data }) => {
                 <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3}/>
                 <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
               </linearGradient>
+              <linearGradient id="colorRawAqi" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.15}/>
+                <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+              </linearGradient>
               <linearGradient id="colorPm" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3}/>
                 <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
@@ -83,26 +88,56 @@ const HistoricalChart = ({ data }) => {
             />
             <Tooltip content={<CustomTooltip />} />
             <ReferenceLine y={100} stroke="#f59e0b" strokeDasharray="3 3" opacity={0.5} label={{ position: 'insideTopLeft', value: 'Moderate Limit', fill: '#f59e0b', fontSize: 10 }} />
-            <Area 
-              type="monotone" 
-              dataKey="AQI" 
-              stroke="#3B82F6" 
+            <Area
+              type="monotone"
+              dataKey="AQI"
+              name="Hybrid AQI"
+              stroke="#3B82F6"
               strokeWidth={3}
-              fillOpacity={1} 
-              fill="url(#colorAqi)" 
+              fillOpacity={1}
+              fill="url(#colorAqi)"
               animationDuration={1500}
             />
-            <Area 
-              type="monotone" 
-              dataKey="PM25" 
-              stroke="#ef4444" 
+            <Area
+              type="monotone"
+              dataKey="RawAQI"
+              name="Raw AQI"
+              stroke="#f59e0b"
+              strokeWidth={1.5}
+              strokeDasharray="5 3"
+              fillOpacity={1}
+              fill="url(#colorRawAqi)"
+              animationDuration={1500}
+              dot={false}
+            />
+            <Area
+              type="monotone"
+              dataKey="PM25"
+              name="PM2.5"
+              stroke="#ef4444"
               strokeWidth={2}
-              fillOpacity={1} 
-              fill="url(#colorPm)" 
+              fillOpacity={1}
+              fill="url(#colorPm)"
               animationDuration={1500}
             />
           </AreaChart>
         </ResponsiveContainer>
+      </div>
+
+      {/* Legend */}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mt-4 text-xs text-text-secondary">
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block w-8 h-0.5 bg-blue-500 rounded" />
+          Hybrid AQI (corrected)
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block w-8 border-t-2 border-dashed border-amber-400" />
+          Raw AQI (baseline)
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block w-8 h-0.5 bg-red-400 rounded" />
+          PM2.5 (µg/m³)
+        </span>
       </div>
     </motion.div>
   );

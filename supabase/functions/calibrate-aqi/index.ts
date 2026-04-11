@@ -2,17 +2,28 @@
  * AQI Lite — Database Webhook handler
  * Trigger: INSERT on public.sensor_readings
  *
- * Calibration pipeline (in order):
- *   1. Hybrid physics correction: correct raw PM2.5 for humidity + temperature
- *   2. CPCB formula:             compute calculated_aqi from CORRECTED PM2.5 + CO₂
- *   3. ML Ridge (optional):      if CALIBRATION_MODEL_JSON secret is set, run
- *                                 inference and store as calibration_model_version
+ * Dual-AQI calibration pipeline:
+ *   Step 1 — Hybrid physics correction:
+ *     correctedPm25 = hybridCorrectPm25(rawPm25, humidity, temperature)
  *
- * DB columns written:
- *   calculated_aqi         → CPCB AQI from corrected PM2.5 (always present)
- *   calibrated_aqi         → hybrid AQI (always present, same source as above)
- *   corrected_pm25         → physics-corrected PM2.5 value
- *   calibration_model_version → 'hybrid-v1' | 'ridge-v1' | null
+ *   Step 2 — Compute BOTH AQI values independently:
+ *     rawAqiData    = computeCpcbSide(rawPm25, co2)     → baseline, no correction
+ *     hybridAqiData = computeCpcbSide(correctedPm25, co2) → physics-corrected
+ *
+ *   Step 3 — DB columns written:
+ *     calculated_aqi         → raw AQI (from raw PM2.5, unmodified baseline)
+ *     calibrated_aqi         → hybrid AQI (physics-corrected, always populated)
+ *     corrected_pm25         → physics-corrected PM2.5 value
+ *     category               → from hybridAqiData (corrected is more accurate)
+ *     main_pollutant         → from hybridAqiData
+ *     calibration_model_version → 'hybrid-v1' always; 'ridge-v1' if ML active
+ *
+ *   Step 4 — ML Ridge (optional, CALIBRATION_MODEL_JSON secret):
+ *     If model present: overrides calibrated_aqi only. calculated_aqi stays raw.
+ *
+ * Frontend usage:
+ *   final_aqi = calibrated_aqi ?? calculated_aqi
+ *   raw_aqi   = calculated_aqi   (for comparison/debugging)
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -260,9 +271,9 @@ Deno.serve(async (req: Request) => {
   }
 
   // ── 1. Extract raw sensor values ───────────────────────────────────────────
-  const rawPm25    = num(rec.pm25);
-  const co2        = num(rec.co2);
-  const humidity   = num(rec.humidity);
+  const rawPm25     = num(rec.pm25);
+  const co2         = num(rec.co2);
+  const humidity    = num(rec.humidity);
   const temperature = num(rec.temperature);
 
   // ── 2. Hybrid physics correction on PM2.5 ─────────────────────────────────
@@ -270,38 +281,44 @@ Deno.serve(async (req: Request) => {
   console.log(
     "[calibrate-aqi] PM2.5 raw:", rawPm25,
     "-> corrected:", correctedPm25,
-    "(humidity:", humidity, "temp:", temperature, ")",
+    "| humidity:", humidity, "temp:", temperature,
   );
 
-  // ── 3. CPCB AQI from CORRECTED PM2.5 (primary path) ──────────────────────
-  const { calculated_aqi, category, main_pollutant } = computeCpcbSide(correctedPm25, co2);
+  // ── 3. Dual AQI computation ───────────────────────────────────────────────
+  // Raw AQI: unmodified baseline from raw PM2.5 — never altered after write
+  const rawAqiData    = computeCpcbSide(rawPm25, co2);
+  // Hybrid AQI: physics-corrected PM2.5 — the recommended display value
+  const hybridAqiData = computeCpcbSide(correctedPm25, co2);
+
   console.log(
-    "[calibrate-aqi] Hybrid CPCB aqi:", calculated_aqi,
-    "category:", category, "main:", main_pollutant,
+    "[calibrate-aqi] Raw AQI:", rawAqiData.calculated_aqi,
+    "| Hybrid AQI:", hybridAqiData.calculated_aqi,
+    "| category:", hybridAqiData.category,
   );
 
-  // hybrid_aqi is always the CPCB formula applied to corrected PM2.5
-  const hybrid_aqi = calculated_aqi;
+  // calculated_aqi = raw baseline (never overwritten, always auditable)
+  const calculated_aqi = rawAqiData.calculated_aqi;
 
-  // ── 4. Optional ML Ridge inference ────────────────────────────────────────
-  // If ML model is available it provides an independent cross-check.
-  // calibrated_aqi = ML value if available, else falls back to hybrid_aqi.
-  let calibrated_aqi: number | null = hybrid_aqi;
+  // calibrated_aqi starts as hybrid; ML can override it below
+  let calibrated_aqi: number | null = hybridAqiData.calculated_aqi;
   let calibration_model_version: string | null = "hybrid-v1";
 
+  // Category and main pollutant derive from the corrected (hybrid) path
+  const { category, main_pollutant } = hybridAqiData;
+
+  // ── 4. Optional ML Ridge inference (overrides calibrated_aqi only) ────────
+  // calculated_aqi (raw baseline) is NEVER touched by ML.
   const mlModel = loadCalibrationModel();
   if (mlModel) {
     try {
       const pred = predictMlAqi(rec, mlModel);
       if (pred) {
-        // Store ML value as calibrated_aqi for comparison/override
         calibrated_aqi = pred.value;
         calibration_model_version = pred.version;
-        console.log("[calibrate-aqi] ML calibrated_aqi:", calibrated_aqi, "version:", calibration_model_version);
+        console.log("[calibrate-aqi] ML override calibrated_aqi:", calibrated_aqi, "version:", calibration_model_version);
       }
     } catch (e) {
-      console.warn("[calibrate-aqi] ML inference failed — retaining hybrid_aqi:", e);
-      // Falls back to hybrid_aqi already set above
+      console.warn("[calibrate-aqi] ML inference failed — retaining hybrid_aqi as calibrated_aqi:", e);
     }
   }
 
@@ -339,11 +356,12 @@ Deno.serve(async (req: Request) => {
   const insertRow = {
     reading_id,
     device_id:                 deviceId,
-    calculated_aqi,            // CPCB AQI from corrected PM2.5
-    category,
+    // Dual-AQI: raw baseline preserved, hybrid/ML goes to calibrated
+    calculated_aqi,            // RAW AQI — from raw PM2.5, never modified
+    calibrated_aqi,            // HYBRID AQI — physics-corrected (or ML override)
+    corrected_pm25:            correctedPm25,
+    category,                  // from hybrid path (more accurate)
     main_pollutant,
-    corrected_pm25:            correctedPm25,           // physics-corrected PM2.5
-    calibrated_aqi,            // hybrid_aqi (or ML override if available)
     calibration_model_version, // 'hybrid-v1' | 'ridge-v1'
     timestamp:                 ts,
   };
@@ -362,11 +380,11 @@ Deno.serve(async (req: Request) => {
 
   console.log("[calibrate-aqi] Success");
   return jsonResponse(200, {
-    success: true,
-    raw_pm25:       rawPm25,
-    corrected_pm25: correctedPm25,
-    calculated_aqi,
-    calibrated_aqi,
+    success:                   true,
+    raw_pm25:                  rawPm25,
+    corrected_pm25:            correctedPm25,
+    calculated_aqi,            // raw AQI
+    calibrated_aqi,            // hybrid/ML AQI
     calibration_model_version,
   });
 });
