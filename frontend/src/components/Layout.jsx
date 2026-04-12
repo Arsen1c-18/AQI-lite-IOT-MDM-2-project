@@ -2,7 +2,6 @@ import React from 'react';
 import { Settings, HelpCircle, User } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import LeafLogo from './LeafLogo';
-import { useAuth } from '../contexts/AuthContext';
 
 const NavLink = ({ to, children }) => {
   const location = useLocation();
@@ -21,9 +20,6 @@ const NavLink = ({ to, children }) => {
 };
 
 const Layout = ({ children }) => {
-  const { user } = useAuth();
-  const avatarUrl = user?.user_metadata?.avatar_url;
-
   return (
     <div className="min-h-screen bg-nature-gradient text-text-primary selection:bg-accent/20">
       <div className="max-w-[1400px] mx-auto px-4 md:px-8 lg:px-12">
@@ -50,13 +46,6 @@ const Layout = ({ children }) => {
             </Link>
             <Link to="/settings" className="p-2 rounded-full hover:bg-green-100 transition-colors" title="Settings">
               <Settings className="w-5 h-5" />
-            </Link>
-            <Link to="/profile" className="w-9 h-9 ml-2 rounded-full border-2 border-green-200 bg-green-50 hover:bg-green-100 transition-colors flex items-center justify-center overflow-hidden" title="Profile">
-              {avatarUrl ? (
-                <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
-              ) : (
-                <User className="w-5 h-5 text-text-secondary" />
-              )}
             </Link>
           </div>
         </header>

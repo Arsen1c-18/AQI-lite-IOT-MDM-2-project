@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Layout from '../components/Layout';
 import { motion } from 'framer-motion';
-import { Bell, Shield, Smartphone, Sliders, Moon, Cloud, HardDrive, Save, CheckCircle, AlertCircle } from 'lucide-react';
+import { Cloud, HardDrive, Save, CheckCircle, AlertCircle } from 'lucide-react';
 import {
   getDeviceId,
   getDeviceName,
@@ -19,37 +19,9 @@ const csvValue = (value) => {
   return /[",\n]/.test(text) ? `"${text}"` : text;
 };
 
-// ─── Toggle component ─────────────────────────────────────────────────────────
-const SettingToggle = ({ label, desc, storageKey, defaultOn }) => {
-  const stored = localStorage.getItem(storageKey);
-  const [isOn, setIsOn] = useState(stored !== null ? stored === 'true' : defaultOn);
-
-  const handleToggle = () => {
-    const next = !isOn;
-    setIsOn(next);
-    localStorage.setItem(storageKey, String(next));
-  };
-
-  return (
-    <div className="flex items-center justify-between py-4 border-b border-green-50 last:border-0">
-      <div>
-        <div className="font-semibold text-text-primary">{label}</div>
-        <div className="text-sm text-text-secondary">{desc}</div>
-      </div>
-      <button
-        onClick={handleToggle}
-        aria-pressed={isOn}
-        className={`w-12 h-6 rounded-full transition-colors relative flex items-center px-1 duration-300 ${isOn ? 'bg-accent' : 'bg-gray-300'}`}
-      >
-        <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-300 ${isOn ? 'translate-x-6' : 'translate-x-0'}`} />
-      </button>
-    </div>
-  );
-};
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 const SettingsPage = () => {
-  const [activeNav, setActiveNav] = useState('Device Settings');
 
   // Device fields — initialised from localStorage → env → fallback
   const [deviceId,   setDeviceId]   = useState(getDeviceId()   === 'your-device-uuid-here' ? '' : getDeviceId());
@@ -150,13 +122,6 @@ const SettingsPage = () => {
     }
   };
 
-  const navItems = [
-    { icon: Smartphone, label: 'Device Settings' },
-    { icon: Bell,       label: 'Notifications'   },
-    { icon: Sliders,    label: 'Appearance'       },
-    { icon: Shield,     label: 'Privacy & Security' },
-  ];
-
   return (
     <Layout>
       <motion.div
@@ -169,30 +134,9 @@ const SettingsPage = () => {
           <p className="text-text-secondary">Manage your device preferences and application settings.</p>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-8">
+        <div className="max-w-3xl space-y-6">
 
-          {/* Nav */}
-          <div className="md:col-span-1 flex flex-col gap-2">
-            {navItems.map(nav => (
-              <button
-                key={nav.label}
-                onClick={() => setActiveNav(nav.label)}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all ${
-                  activeNav === nav.label
-                    ? 'bg-accent text-white shadow-md shadow-green-100'
-                    : 'text-text-secondary hover:bg-green-50 hover:text-accent'
-                }`}
-              >
-                <nav.icon className="w-5 h-5" />
-                {nav.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Panel */}
-          <div className="md:col-span-2 space-y-6">
-
-            {/* ── Device Connection ── */}
+          {/* ── Device Connection ── */}
             <div className="glassmorphism p-6 md:p-8 rounded-3xl border border-green-100">
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center text-accent">
@@ -255,39 +199,6 @@ const SettingsPage = () => {
               </div>
             </div>
 
-            {/* ── Preferences ── */}
-            <div className="glassmorphism p-6 md:p-8 rounded-3xl border border-green-100">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center text-accent">
-                  <Sliders className="w-5 h-5" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-text-primary">Preferences</h2>
-                  <p className="text-sm text-text-secondary">Customize your dashboard experience.</p>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <SettingToggle
-                  label="Real-time Subscriptions"
-                  desc="Receive live inserts via Supabase WebSockets immediately."
-                  storageKey="aqi_pref_realtime"
-                  defaultOn={true}
-                />
-                <SettingToggle
-                  label="Health Alerts"
-                  desc="Show actionable health recommendations based on AQI level."
-                  storageKey="aqi_pref_health_alerts"
-                  defaultOn={true}
-                />
-                <SettingToggle
-                  label="Temperature in Fahrenheit"
-                  desc="Toggle between Celsius and Fahrenheit globally."
-                  storageKey="aqi_pref_fahrenheit"
-                  defaultOn={false}
-                />
-              </div>
-            </div>
 
             {/* ── Data Management ── */}
             <div className="glassmorphism p-6 md:p-8 rounded-3xl border border-green-100">
@@ -338,7 +249,6 @@ const SettingsPage = () => {
               </button>
             </div>
 
-          </div>
         </div>
       </motion.div>
     </Layout>

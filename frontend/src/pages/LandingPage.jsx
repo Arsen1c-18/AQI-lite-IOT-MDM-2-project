@@ -3,7 +3,6 @@ import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { Cpu, Cloud, Activity, ArrowRight, Zap, Wind, Thermometer, Droplets, BarChart3, User, RefreshCw, Wifi, WifiOff } from 'lucide-react';
 import LeafLogo from '../components/LeafLogo';
-import { useAuth } from '../contexts/AuthContext';
 import { getAqiInfo } from '../utils/constants';
 
 const API_BASE  = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
@@ -103,7 +102,6 @@ const LivePreviewCard = ({ latestData, loading }) => {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 const LandingPage = () => {
-  const { user } = useAuth();
 
   // Shared live state — polled every 30 s to match ESP32 send interval
   const [latestData,  setLatestData]  = useState(null);
@@ -159,15 +157,6 @@ const LandingPage = () => {
           <Link to="/about"     className="hover:text-accent transition-colors">About</Link>
         </div>
         <div className="flex items-center gap-3">
-          {user ? (
-            <Link to="/profile" className="hidden md:flex items-center gap-2 text-text-primary hover:bg-green-100 font-semibold px-5 py-2.5 rounded-full text-sm transition-all">
-              <User className="w-4 h-4" /> Profile
-            </Link>
-          ) : (
-            <Link to="/login" className="hidden md:flex items-center text-text-primary hover:bg-green-100 font-semibold px-5 py-2.5 rounded-full text-sm transition-all">
-              Log In
-            </Link>
-          )}
           <Link to="/dashboard" className="hidden md:flex items-center gap-2 bg-accent hover:bg-green-700 text-white font-semibold px-5 py-2.5 rounded-full text-sm transition-all shadow-md shadow-green-200">
             Open Dashboard
           </Link>
