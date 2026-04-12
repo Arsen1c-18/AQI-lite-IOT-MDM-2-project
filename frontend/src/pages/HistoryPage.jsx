@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import { useAQIData } from '../hooks/useAQIData';
 import { motion } from 'framer-motion';
-import { CalendarDays, TrendingDown, TrendingUp, Activity } from 'lucide-react';
+import { CalendarDays, TrendingDown, TrendingUp, Activity, BarChart2 } from 'lucide-react';
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
@@ -43,17 +43,19 @@ const StatCard = ({ label, value, unit, icon: Icon, trend, color }) => (
 );
 
 const HistoryPage = () => {
-  const { historicalData, latestData, loading } = useAQIData();
+  const { historicalData, latestData, loading, error } = useAQIData();
   const [activeMetric, setActiveMetric] = useState('all');
 
   const chartData = useMemo(() => {
     if (!historicalData) return [];
     return historicalData.map(item => ({
-      time:   new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      AQI:    item.final_aqi,          // hybrid-corrected (primary display)
-      RawAQI: item.raw_aqi ?? null,    // unmodified baseline for comparison
-      PM25:   item.pm25 ? parseFloat(item.pm25.toFixed(1)) : null,
-      CO2:    item.co2  ? parseFloat(item.co2.toFixed(0))  : null,
+      time:     new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      AQI:      item.final_aqi,
+      RawAQI:   item.raw_aqi ?? null,
+      PM25:     item.pm25        ? parseFloat(item.pm25.toFixed(1))        : null,
+      CO2:      item.co2         ? parseFloat(item.co2.toFixed(0))         : null,
+      Temp:     item.temperature ? parseFloat(item.temperature.toFixed(1)) : null,
+      Humidity: item.humidity    ? parseFloat(item.humidity.toFixed(1))    : null,
     }));
   }, [historicalData]);
 
@@ -66,10 +68,11 @@ const HistoryPage = () => {
   const minAQI = useMemo(() => historicalData.length ? Math.min(...historicalData.map(d => d.final_aqi || 0)) : null, [historicalData]);
 
   const metrics = [
-    { key: 'all', label: 'All Metrics' },
-    { key: 'AQI', label: 'AQI Only' },
-    { key: 'PM25', label: 'PM2.5' },
-    { key: 'CO2', label: 'CO₂' },
+    { key: 'all',      label: 'All Metrics' },
+    { key: 'AQI',      label: 'AQI Only' },
+    { key: 'PM25',     label: 'PM2.5' },
+    { key: 'CO2',      label: 'CO₂' },
+    { key: 'TempHum',  label: 'Temp & Humidity' },
   ];
 
   if (loading) {
@@ -78,6 +81,29 @@ const HistoryPage = () => {
         <div className="flex h-[60vh] items-center justify-center">
           <div className="w-10 h-10 rounded-full border-4 border-accent border-t-transparent animate-spin" />
         </div>
+      </Layout>
+    );
+  }
+
+  if (!loading && historicalData.length === 0) {
+    return (
+      <Layout>
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex flex-col items-center justify-center h-[70vh] gap-6 text-center"
+        >
+          <div className="w-20 h-20 rounded-full bg-green-50 flex items-center justify-center">
+            <BarChart2 className="w-10 h-10 text-accent" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-text-primary mb-2">No History Yet</h2>
+            <p className="text-text-secondary max-w-md">
+              No sensor readings found for the last 24 hours.<br />
+              Once your ESP32 starts sending data, charts will appear here.
+            </p>
+          </div>
+        </motion.div>
       </Layout>
     );
   }
@@ -115,10 +141,20 @@ const HistoryPage = () => {
 
         {/* Stats Row */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard label="Current AQI" value={latestData?.aqi} unit="" icon={Activity} color="text-accent" trend={-5.2} />
+          <StatCard label="Current AQI" value={latestData?.aqi} unit="" icon={Activity} color="text-accent" />
           <StatCard label="24h Average" value={avgAQI} unit="" icon={Activity} color="text-blue-500" />
-          <StatCard label="24h Peak" value={maxAQI} unit="" icon={TrendingUp} color="text-red-500" />
-          <StatCard label="24h Best" value={minAQI} unit="" icon={TrendingDown} color="text-green-600" />
+          <StatCard label="24h Peak"    value={maxAQI} unit="" icon={TrendingUp} color="text-red-500" />
+          <StatCard label="24h Best"    value={minAQI} unit="" icon={TrendingDown} color="text-green-600" />
+        </div>
+
+        {/* Model source info */}
+        <div className="flex items-center gap-2 text-xs text-text-secondary">
+          <span className="px-2.5 py-1 rounded-full bg-blue-50 border border-blue-100 text-blue-600 font-semibold">
+            Hybrid AQI
+          </span> = ML-calibrated (Ridge-v1) when trained, otherwise CPCB formula
+          <span className="ml-2 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-100 text-amber-600 font-semibold">
+            Raw AQI
+          </span> = CPCB formula from PM2.5 breakpoints only
         </div>
 
         {/* Main Chart */}
@@ -172,6 +208,25 @@ const HistoryPage = () => {
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: '#4b7a5e', fontSize: 11 }} />
                   <Tooltip content={<CustomTooltip />} />
                   <Line type="monotone" dataKey="CO2" stroke="#3b82f6" strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} animationDuration={1200} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+        {/* Temp + Humidity Chart */}
+        {(activeMetric === 'all' || activeMetric === 'TempHum') && (
+          <div className="glassmorphism rounded-3xl p-6 md:p-8 border border-green-100">
+            <h2 className="text-xl font-semibold text-text-primary mb-6">Temperature &amp; Humidity</h2>
+            <div className="h-[240px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(22,163,74,0.08)" />
+                  <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fill: '#4b7a5e', fontSize: 11 }} minTickGap={30} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#4b7a5e', fontSize: 11 }} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend wrapperStyle={{ fontSize: '13px', paddingTop: '16px' }} />
+                  <Line type="monotone" dataKey="Temp"     name="Temp (°C)" stroke="#f97316" strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} animationDuration={1200} />
+                  <Line type="monotone" dataKey="Humidity" name="Humidity (%)" stroke="#06b6d4" strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} animationDuration={1200} />
                 </LineChart>
               </ResponsiveContainer>
             </div>

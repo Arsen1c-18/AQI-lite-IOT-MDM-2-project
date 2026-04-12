@@ -1,228 +1,112 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase, isSupabaseConfigured } from '../supabaseClient';
-import { getDeviceId } from '../utils/deviceSettings';
+import { getDeviceId, isValidDeviceId } from '../utils/deviceSettings';
 
-// ─── Demo / fallback data ─────────────────────────────────────────────────────
-const generateDemoHistory = () => {
-  const rows = [];
-  for (let i = 24; i >= 0; i--) {
-    const d = new Date();
-    d.setHours(d.getHours() - i);
-    rows.push({
-      timestamp:      d.toISOString(),
-      final_aqi:      Math.floor(30 + Math.random() * 40),
-      pm25:           parseFloat((10 + Math.random() * 15).toFixed(2)),
-      co2:            parseFloat((400 + Math.random() * 60).toFixed(0)),
-    });
-  }
-  return rows;
-};
-
-const DEMO_LATEST = {
-  aqi:           42,
-  category:      'Good',
-  main_pollutant: 'PM2.5',
-  pm25:          12.5,
-  co2:           410,
-  temperature:   22.4,
-  humidity:      48,
-  timestamp:     new Date().toISOString(),
-};
-
-const DEMO_DEVICE = {
-  device_name: 'Demo Sensor (Offline)',
-  last_seen:   new Date().toISOString(),
-  status:      'offline',
-};
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 export const useAQIData = () => {
   const [latestData,     setLatestData]     = useState(null);
   const [historicalData, setHistoricalData] = useState([]);
   const [deviceInfo,     setDeviceInfo]     = useState(null);
+  const [mlPrediction,   setMlPrediction]   = useState(null);   // NEW: ML inference result
   const [loading,        setLoading]        = useState(true);
   const [error,          setError]          = useState(null);
-  const [isDemo,         setIsDemo]         = useState(false);
+
+  const fetchJson = useCallback(async (path) => {
+    const res = await fetch(`${API_BASE_URL}${path}`);
+    if (!res.ok) {
+      let detail = `Request failed (${res.status})`;
+      try {
+        const body = await res.json();
+        detail = body?.detail || detail;
+      } catch {
+        // keep status text fallback
+      }
+      throw new Error(detail);
+    }
+    return res.json();
+  }, []);
 
   // ── Latest reading + device status ────────────────────────────────────────
   const fetchLatestData = useCallback(async () => {
     const DEVICE_ID = getDeviceId();
-
-    if (!isSupabaseConfigured() || !DEVICE_ID || DEVICE_ID === 'your-device-uuid-here') {
-      setLatestData(DEMO_LATEST);
-      setDeviceInfo(DEMO_DEVICE);
-      setIsDemo(true);
+    if (!isValidDeviceId(DEVICE_ID)) {
+      setError('No device ID configured. Go to Settings and enter your device UUID.');
       setLoading(false);
       return;
     }
 
     try {
-      // 1. Latest AQI result — select result_id (PK), reading_id (FK), device_id
-      //    FIX: was selecting 'id' which doesn't exist; schema uses 'result_id' and 'reading_id'
-      const { data: aqiRow, error: aqiErr } = await supabase
-        .from('aqi_results')
-        .select('result_id, calculated_aqi, calibrated_aqi, corrected_pm25, calibration_model_version, category, main_pollutant, timestamp, reading_id, device_id')
-        .eq('device_id', DEVICE_ID)
-        .order('timestamp', { ascending: false })
-        .limit(1)
-        .single();
-
-      if (aqiErr) {
-        if (aqiErr.code === 'PGRST116') throw new Error('No readings found yet for this device.');
-        throw aqiErr;
-      }
-
-      // 2. Sensor reading via reading_id FK
-      //    FIX: was querying .eq('id', ...) — schema PK is 'reading_id'
-      let sensorRow = null;
-      if (aqiRow?.reading_id) {
-        const { data: sr, error: srErr } = await supabase
-          .from('sensor_readings')
-          .select('pm25, co2, temperature, humidity')
-          .eq('reading_id', aqiRow.reading_id)   // ✓ reading_id is the PK
-          .single();
-        if (!srErr) sensorRow = sr;
-      } else {
-        // Fallback: latest reading for device
-        const { data: sr } = await supabase
-          .from('sensor_readings')
-          .select('pm25, co2, temperature, humidity')
-          .eq('device_id', DEVICE_ID)             // ✓ device_id column on sensor_readings
-          .order('timestamp', { ascending: false })
-          .limit(1)
-          .single();
-        sensorRow = sr;
-      }
-
-      // 3. Device name
-      //    FIX: was querying .eq('id', DEVICE_ID) — schema PK is 'device_id'
-      const { data: deviceRow } = await supabase
-        .from('devices')
-        .select('device_name')
-        .eq('device_id', DEVICE_ID)               // ✓ device_id is the PK
-        .single();
-
-      // 4. Latest status log
-      const { data: statusRow } = await supabase
-        .from('device_status_logs')
-        .select('status, last_seen')
-        .eq('device_id', DEVICE_ID)
-        .order('last_seen', { ascending: false })
-        .limit(1)
-        .single();
-
-      setLatestData({
-        // Hybrid-first: calibrated_aqi holds hybrid_aqi (or ML override)
-        aqi:            aqiRow.calibrated_aqi ?? aqiRow.calculated_aqi,
-        raw_aqi:        aqiRow.calculated_aqi,       // CPCB AQI before any correction
-        hybrid_aqi:     aqiRow.calibrated_aqi,       // physics-corrected AQI
-        category:       aqiRow.category,
-        main_pollutant: aqiRow.main_pollutant,
-        calibration_model: aqiRow.calibration_model_version ?? null,
-        // Raw sensor values
-        pm25:           sensorRow?.pm25        ?? null,
-        corrected_pm25: aqiRow.corrected_pm25  ?? null, // hybrid-corrected PM2.5
-        co2:            sensorRow?.co2         ?? null,
-        temperature:    sensorRow?.temperature ?? null,
-        humidity:       sensorRow?.humidity    ?? null,
-        timestamp:      aqiRow.timestamp,
-      });
-
-      setDeviceInfo({
-        device_name: deviceRow?.device_name || 'AQI Lite Node',
-        last_seen:   statusRow?.last_seen   || aqiRow.timestamp,
-        status:      statusRow?.status      || 'unknown',
-      });
-
-      setIsDemo(false);
+      const payload = await fetchJson(`/api/devices/${encodeURIComponent(DEVICE_ID)}/latest`);
+      setLatestData(payload.latestData);
+      setDeviceInfo(payload.deviceInfo);
       setError(null);
     } catch (err) {
       console.error('[useAQIData] fetchLatestData error:', err.message);
-      setError(err.message);
-      setLatestData(DEMO_LATEST);
-      setDeviceInfo(DEMO_DEVICE);
-      setIsDemo(true);
+      // 404 means device exists but no readings yet — not a hard error
+      if (err.message.includes('404') || err.message.toLowerCase().includes('no readings')) {
+        setLatestData(null);
+        setDeviceInfo(null);
+        setError(null);
+      } else {
+        setError(err.message);
+      }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fetchJson]);
 
   // ── Historical data (last 24 h) ────────────────────────────────────────────
   const fetchHistoricalData = useCallback(async () => {
     const DEVICE_ID = getDeviceId();
-
-    if (!isSupabaseConfigured() || !DEVICE_ID || DEVICE_ID === 'your-device-uuid-here') {
-      setHistoricalData(generateDemoHistory());
-      return;
-    }
+    if (!isValidDeviceId(DEVICE_ID)) return;
 
     try {
-      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-
-      const { data, error: err } = await supabase
-        .from('aqi_results')
-        .select('calculated_aqi, calibrated_aqi, corrected_pm25, calibration_model_version, timestamp, reading_id')
-        .eq('device_id', DEVICE_ID)
-        .gte('timestamp', since)
-        .order('timestamp', { ascending: true });
-
-      if (err) throw err;
-
-      if (!data || data.length === 0) {
-        setHistoricalData(generateDemoHistory());
-        return;
-      }
-
-      // Batch-fetch sensor data
-      //   FIX: was querying .in('id', readingIds) — schema PK is 'reading_id'
-      const readingIds = data.map(r => r.reading_id).filter(Boolean);
-      let sensorMap = {};
-
-      if (readingIds.length > 0) {
-        const { data: sensors } = await supabase
-          .from('sensor_readings')
-          .select('reading_id, pm25, co2')          // ✓ select reading_id as the key
-          .in('reading_id', readingIds);             // ✓ filter on reading_id
-
-        if (sensors) {
-          sensorMap = Object.fromEntries(sensors.map(s => [s.reading_id, s]));
-        }
-      }
-
-      setHistoricalData(
-        data.map(row => ({
-          timestamp:      row.timestamp,
-          final_aqi:      row.calibrated_aqi ?? row.calculated_aqi, // hybrid-first
-          raw_aqi:        row.calculated_aqi,                        // for comparison
-          corrected_pm25: row.corrected_pm25 ?? null,
-          calibration_model: row.calibration_model_version ?? null,
-          pm25:           sensorMap[row.reading_id]?.pm25 ?? null,
-          co2:            sensorMap[row.reading_id]?.co2  ?? null,
-        }))
-      );
+      const payload = await fetchJson(`/api/devices/${encodeURIComponent(DEVICE_ID)}/history?hours=24`);
+      setHistoricalData(payload?.data || []);
     } catch (err) {
       console.error('[useAQIData] fetchHistoricalData error:', err.message);
-      setHistoricalData(generateDemoHistory());
+      setHistoricalData([]);
     }
-  }, []);
+  }, [fetchJson]);
+
+  // ── ML Prediction (best available: Ridge model or CPCB fallback) ───────────
+  const fetchMlPrediction = useCallback(async () => {
+    const DEVICE_ID = getDeviceId();
+    if (!isValidDeviceId(DEVICE_ID)) return;
+
+    try {
+      const payload = await fetchJson(`/api/devices/${encodeURIComponent(DEVICE_ID)}/predict`);
+      setMlPrediction(payload);
+    } catch (err) {
+      // Predict endpoint failing is non-critical — silently ignore
+      console.warn('[useAQIData] fetchMlPrediction error (non-fatal):', err.message);
+      setMlPrediction(null);
+    }
+  }, [fetchJson]);
 
   // ── Bootstrap ──────────────────────────────────────────────────────────────
   useEffect(() => {
     fetchLatestData();
     fetchHistoricalData();
+    fetchMlPrediction();
 
+    // Poll every 20s for live updates
     const interval = setInterval(() => {
       fetchLatestData();
       fetchHistoricalData();
-    }, 5 * 60 * 1000);
+      fetchMlPrediction();
+    }, 20 * 1000);
 
     return () => clearInterval(interval);
-  }, [fetchLatestData, fetchHistoricalData]);
+  }, [fetchLatestData, fetchHistoricalData, fetchMlPrediction]);
 
   const refetch = useCallback(() => {
+    setLoading(true);
     fetchLatestData();
     fetchHistoricalData();
-  }, [fetchLatestData, fetchHistoricalData]);
+    fetchMlPrediction();
+  }, [fetchLatestData, fetchHistoricalData, fetchMlPrediction]);
 
-  return { latestData, historicalData, deviceInfo, loading, error, isDemo, refetch };
+  return { latestData, historicalData, deviceInfo, mlPrediction, loading, error, refetch };
 };

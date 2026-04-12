@@ -7,10 +7,11 @@ import DeviceStatus from '../components/DeviceStatus';
 import Recommendations from '../components/Recommendations';
 import { useAQIData } from '../hooks/useAQIData';
 import { useRealtime } from '../hooks/useRealtime';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Wifi, RefreshCw } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 function Dashboard() {
-  const { latestData, historicalData, deviceInfo, loading, error, isDemo, refetch } = useAQIData();
+  const { latestData, historicalData, deviceInfo, mlPrediction, loading, error, refetch } = useAQIData();
 
   useRealtime(refetch);
 
@@ -40,35 +41,68 @@ function Dashboard() {
     );
   }
 
-  return (
-    <Layout>
-      {/* Demo mode banner */}
-      {isDemo && (
-        <div className="mb-6 flex items-center gap-3 px-5 py-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-sm font-medium">
-          <AlertTriangle className="w-4 h-4 flex-shrink-0 text-amber-500" />
-          <span>
-            <strong>Demo mode</strong> — Supabase is not connected yet. Add your keys to{' '}
-            <code className="bg-amber-100 px-1.5 py-0.5 rounded font-mono text-xs">frontend/.env</code> to see live data.
-          </span>
-        </div>
-      )}
-
-      {/* Error banner (when connected but a fetch failed) */}
-      {error && !isDemo && (
-        <div className="mb-6 flex items-center justify-between gap-3 px-5 py-3.5 rounded-2xl bg-red-50 border border-red-200 text-red-800 text-sm font-medium">
-          <div className="flex items-center gap-3">
-            <AlertTriangle className="w-4 h-4 flex-shrink-0 text-red-500" />
-            <span>{error}</span>
+  // Hard error (backend unreachable, bad config, etc.)
+  if (error) {
+    return (
+      <Layout>
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex flex-col items-center justify-center h-[70vh] gap-6 text-center"
+        >
+          <div className="w-20 h-20 rounded-full bg-red-50 flex items-center justify-center">
+            <AlertTriangle className="w-10 h-10 text-red-400" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-text-primary mb-2">Connection Error</h2>
+            <p className="text-text-secondary max-w-md">{error}</p>
           </div>
           <button
             onClick={refetch}
-            className="px-3 py-1.5 bg-red-100 hover:bg-red-200 rounded-lg text-xs font-semibold transition-colors"
+            className="flex items-center gap-2 px-6 py-3 bg-accent text-white rounded-2xl font-semibold hover:bg-accent/90 transition-colors shadow-lg shadow-green-100"
           >
+            <RefreshCw className="w-4 h-4" />
             Retry
           </button>
-        </div>
-      )}
+        </motion.div>
+      </Layout>
+    );
+  }
 
+  // No data yet — ESP32 not yet sending, but everything is configured correctly
+  if (!latestData) {
+    return (
+      <Layout>
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex flex-col items-center justify-center h-[70vh] gap-6 text-center"
+        >
+          <div className="w-20 h-20 rounded-full bg-green-50 flex items-center justify-center">
+            <Wifi className="w-10 h-10 text-accent animate-pulse" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-text-primary mb-2">Waiting for Sensor Data</h2>
+            <p className="text-text-secondary max-w-md">
+              Your device is configured and the backend is connected to Supabase.
+              <br />
+              Waiting for the first reading from your ESP32…
+            </p>
+          </div>
+          <button
+            onClick={refetch}
+            className="flex items-center gap-2 px-6 py-3 bg-accent text-white rounded-2xl font-semibold hover:bg-accent/90 transition-colors shadow-lg shadow-green-100"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Check Again
+          </button>
+        </motion.div>
+      </Layout>
+    );
+  }
+
+  return (
+    <Layout>
       <div className="flex flex-col gap-6 lg:gap-8 mb-8">
 
         {/* Top layer: Hero + Status/Recommendations side by side on desktop */}
@@ -79,6 +113,7 @@ function Dashboard() {
               aqi={latestData?.aqi}
               category={latestData?.category}
               prevAqi={prevAqi}
+              mlPrediction={mlPrediction}
             />
           </div>
 
