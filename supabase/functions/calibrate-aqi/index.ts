@@ -272,9 +272,15 @@ Deno.serve(async (req: Request) => {
 
   // ── 1. Extract raw sensor values ───────────────────────────────────────────
   const rawPm25     = num(rec.pm25);
-  const co2         = num(rec.co2);
+  let co2           = num(rec.co2);
   const humidity    = num(rec.humidity);
   const temperature = num(rec.temperature);
+
+  // Filter unrealistic CO₂ values (sensor warm-up bug)
+  if (co2 !== null && co2 > 2000) {
+    console.warn("[calibrate-aqi] Ignoring unrealistic CO₂ value:", co2);
+    co2 = null;
+  }
 
   // ── 2. Hybrid physics correction on PM2.5 ─────────────────────────────────
   const correctedPm25 = hybridCorrectPm25(rawPm25, humidity, temperature);
