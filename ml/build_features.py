@@ -167,7 +167,7 @@ def main():
     out_path  = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     features.to_csv(out_path, index=False)
-    print(f'[build_features] Features saved → {out_path}')
+    print(f'[build_features] Features saved to {out_path}')
     print(features[['hour', 'pm25', 'co2', 'temperature', 'humidity', 'aqi_reference']].tail(5).to_string())
 
 

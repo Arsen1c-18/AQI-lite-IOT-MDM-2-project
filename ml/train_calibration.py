@@ -100,7 +100,7 @@ def train(features_csv: str, alpha: float = 1.0, test_size: float = 0.2):
     # Save model
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
     joblib.dump(model, MODEL_PATH)
-    print(f'\n[train] Model saved → {MODEL_PATH}')
+    print(f'\n[train] Model saved to {MODEL_PATH}')
 
     # Save metadata
     scaler  = model.named_steps['scaler']
@@ -129,7 +129,7 @@ def train(features_csv: str, alpha: float = 1.0, test_size: float = 0.2):
         'imputer_medians': {k: round(v, 6) for k, v in imputer_medians.items()},
     }
     METADATA_PATH.write_text(json.dumps(metadata, indent=2))
-    print(f'[train] Metadata saved → {METADATA_PATH}')
+    print(f'[train] Metadata saved to {METADATA_PATH}')
 
     edge_secret = {
         "version":      MODEL_VERSION,
