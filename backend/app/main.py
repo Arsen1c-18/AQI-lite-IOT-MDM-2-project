@@ -4,6 +4,13 @@ Queries sensor_readings directly since aqi_results is unused in the live DB.
 AQI is computed here using CPCB PM2.5 linear-interpolation breakpoints.
 ML predictions are pulled from ml_predictions table when available.
 A /predict endpoint also supports live Ridge inference from the saved joblib model.
+
+Temperature & Humidity policy
+──────────────────────────────
+Both values are ALWAYS taken directly from sensor_readings (no ML).
+DHT11 sensors occasionally return physically impossible readings (e.g. 16 °C
+in a warm room). When the latest reading is out of range, the backend scans
+the last 30 rows and returns the most recently captured VALID value from the DB.
 """
 
 import sys
@@ -22,6 +29,7 @@ from .models import (
     LatestDataResponse,
 )
 from .supabase_service import get_supabase_client, maybe_single_row
+from .twilio_service import notify_device_on, notify_device_off
 
 settings = get_settings()
 app = FastAPI(title="AQI Lite Backend", version="2.0.0")
@@ -75,12 +83,60 @@ def aqi_to_category(aqi: Optional[int]) -> str:
     return "Severe" if aqi and aqi > 400 else "Unknown"
 
 
+# ─── Sensor sanity helpers ────────────────────────────────────────────────────
+
+def _valid_temp(t) -> bool:
+    """Physically plausible indoor/outdoor temperature: 18–50 °C."""
+    return t is not None and 18.0 <= float(t) <= 50.0
+
+
+def _valid_hum(h) -> bool:
+    """Physically plausible relative humidity: 5–98 %."""
+    return h is not None and 5.0 <= float(h) <= 98.0
+
+
+def _get_valid_temp_hum(supabase, device_id: str, latest_row: dict) -> tuple:
+    """
+    Return (temperature, humidity) guaranteed to be within sane ranges.
+    Uses the latest row if valid; otherwise scans recent history for the
+    most recently captured valid value — 100 % from sensor_readings, no ML.
+    """
+    temp_val = latest_row.get("temperature")
+    hum_val  = latest_row.get("humidity")
+
+    if _valid_temp(temp_val) and _valid_hum(hum_val):
+        return temp_val, hum_val  # fast path — most rows are fine
+
+    # Scan up to the last 30 readings for valid values
+    try:
+        scan_resp = (
+            supabase.table("sensor_readings")
+            .select("temperature, humidity")
+            .eq("device_id", device_id)
+            .order("timestamp", desc=True)
+            .limit(30)
+            .execute()
+        )
+        for row in (scan_resp.data or []):
+            if not _valid_temp(temp_val) and _valid_temp(row.get("temperature")):
+                temp_val = row["temperature"]
+            if not _valid_hum(hum_val) and _valid_hum(row.get("humidity")):
+                hum_val = row["humidity"]
+            if _valid_temp(temp_val) and _valid_hum(hum_val):
+                break  # both found — stop scanning
+    except Exception as exc:
+        print(f"[latest] temp/hum scan failed: {exc}", file=sys.stderr)
+
+    return temp_val, hum_val
+
+
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 def _enrich_reading(row: dict, ml_map: dict | None = None) -> dict:
     """
     Compute AQI from PM2.5 for a sensor_readings row.
     Optionally overlay ml_predictions if available.
+    Does NOT touch temperature or humidity — those come straight from the DB.
     """
     pm25 = row.get("pm25")
     raw_aqi = pm25_to_aqi(pm25)
@@ -111,7 +167,7 @@ def health() -> dict[str, str]:
 def get_latest(device_id: str) -> dict:
     supabase = get_supabase_client()
 
-    # Latest sensor reading
+    # Fetch the absolute latest sensor reading
     sensor_resp = (
         supabase.table("sensor_readings")
         .select("reading_id, device_id, pm25, co2, temperature, humidity, timestamp")
@@ -124,20 +180,26 @@ def get_latest(device_id: str) -> dict:
     if not sensor_row:
         raise HTTPException(status_code=404, detail="No readings found for this device.")
 
-    # Try to get ML prediction for this reading
+    # Temperature & humidity: last VALID DB reading, zero ML involvement
+    temp_val, hum_val = _get_valid_temp_hum(supabase, device_id, sensor_row)
+
+    # Try to get ML prediction for AQI only (table may not exist yet)
     ml_map: dict = {}
     rid = sensor_row.get("reading_id")
     if rid is not None:
-        ml_resp = (
-            supabase.table("ml_predictions")
-            .select("reading_id, predicted_aqi, predicted_category, pollution_source, confidence_score")
-            .eq("reading_id", rid)
-            .limit(1)
-            .execute()
-        )
-        ml_row = maybe_single_row(ml_resp.data or [])
-        if ml_row:
-            ml_map[rid] = ml_row
+        try:
+            ml_resp = (
+                supabase.table("ml_predictions")
+                .select("reading_id, predicted_aqi, predicted_category, pollution_source, confidence_score")
+                .eq("reading_id", rid)
+                .limit(1)
+                .execute()
+            )
+            ml_row = maybe_single_row(ml_resp.data or [])
+            if ml_row:
+                ml_map[rid] = ml_row
+        except Exception:
+            pass  # ml_predictions table not yet created — skip silently
 
     enriched = _enrich_reading(sensor_row, ml_map)
 
@@ -172,10 +234,10 @@ def get_latest(device_id: str) -> dict:
         main_pollutant="PM2.5",
         calibration_model="ml-v1" if enriched["ml_aqi"] is not None else "cpcb-formula",
         pm25=sensor_row.get("pm25"),
-        corrected_pm25=sensor_row.get("pm25"),   # no separate corrected value
+        corrected_pm25=sensor_row.get("pm25"),
         co2=sensor_row.get("co2"),
-        temperature=sensor_row.get("temperature"),
-        humidity=sensor_row.get("humidity"),
+        temperature=temp_val,   # last valid DB reading (≥18 °C), no ML
+        humidity=hum_val,       # last valid DB reading (≥5 %),  no ML
         timestamp=sensor_row["timestamp"],
     )
 
@@ -212,13 +274,13 @@ def get_history(
     rows = sensor_resp.data or []
 
     if not rows:
-        # Fallback: return the last `hours` worth regardless of timestamp
+        # Fallback: return the last N rows regardless of timestamp
         sensor_resp2 = (
             supabase.table("sensor_readings")
             .select("reading_id, pm25, co2, temperature, humidity, timestamp")
             .eq("device_id", device_id)
             .order("timestamp", desc=True)
-            .limit(hours)           # 1 row per hour as approximation
+            .limit(hours)
             .execute()
         )
         rows = list(reversed(sensor_resp2.data or []))
@@ -226,23 +288,28 @@ def get_history(
     if not rows:
         return HistoricalDataResponse(data=[])
 
-    # Batch-fetch ML predictions for all reading_ids
+    # Batch-fetch ML predictions for AQI overlay (silently skip if table missing)
     reading_ids = [r.get("reading_id") for r in rows if r.get("reading_id") is not None]
     ml_map: dict = {}
     if reading_ids:
-        ml_resp = (
-            supabase.table("ml_predictions")
-            .select("reading_id, predicted_aqi, predicted_category, pollution_source, confidence_score")
-            .in_("reading_id", reading_ids)
-            .execute()
-        )
-        for ml in (ml_resp.data or []):
-            if ml.get("reading_id") is not None:
-                ml_map[ml["reading_id"]] = ml
+        try:
+            ml_resp = (
+                supabase.table("ml_predictions")
+                .select("reading_id, predicted_aqi, predicted_category, pollution_source, confidence_score")
+                .in_("reading_id", reading_ids)
+                .execute()
+            )
+            for ml in (ml_resp.data or []):
+                if ml.get("reading_id") is not None:
+                    ml_map[ml["reading_id"]] = ml
+        except Exception as ml_err:
+            print(f"[history] ml_predictions lookup skipped: {ml_err}", file=sys.stderr)
 
     points = []
     for row in rows:
         enriched = _enrich_reading(row, ml_map)
+        # For history, use the raw DB temp/humidity as-is (shows the full timeline).
+        # Filtering bad readings would distort the historical graph.
         points.append(
             HistoricalDataPoint(
                 timestamp=row["timestamp"],
@@ -252,8 +319,8 @@ def get_history(
                 calibration_model="ml-v1" if enriched["ml_aqi"] is not None else "cpcb-formula",
                 pm25=row.get("pm25"),
                 co2=row.get("co2"),
-                temperature=row.get("temperature"),
-                humidity=row.get("humidity"),
+                temperature=row.get("temperature"),  # raw from DB
+                humidity=row.get("humidity"),         # raw from DB
             )
         )
 
@@ -281,11 +348,45 @@ def _load_ml_model():
         return None, None
 
 
+def _persist_ml_prediction(
+    supabase,
+    reading_id: Optional[str],
+    predicted_aqi: Optional[int],
+    predicted_category: Optional[str],
+    model_version: Optional[str],
+    raw_aqi: Optional[int],
+) -> None:
+    """Best-effort upsert for latest ML inference so history can reuse ML values."""
+    if not reading_id or predicted_aqi is None:
+        return
+
+    payload = {
+        "reading_id": reading_id,
+        "predicted_aqi": int(predicted_aqi),
+        "predicted_category": predicted_category,
+        "pollution_source": "PM2.5",
+        "confidence_score": None,
+        "model_version": model_version,
+        "raw_aqi": raw_aqi,
+    }
+
+    try:
+        (
+            supabase.table("ml_predictions")
+            .upsert(payload, on_conflict="reading_id")
+            .execute()
+        )
+    except Exception as exc:
+        # Avoid breaking /predict if table/columns are not present yet.
+        print(f"[predict] Could not persist ML prediction: {exc}", file=sys.stderr)
+
+
 @app.get("/api/devices/{device_id}/predict")
 def get_prediction(device_id: str) -> dict:
     """
     Run live Ridge-regression AQI prediction against the latest sensor reading.
     Falls back to CPCB formula if the model is not yet trained.
+    Temperature & humidity in features_used come directly from the DB sensor reading.
     """
     import numpy as np, pandas as pd
 
@@ -304,14 +405,15 @@ def get_prediction(device_id: str) -> dict:
     if not sensor_row:
         raise HTTPException(status_code=404, detail="No readings found for this device.")
 
-    pm25        = sensor_row.get("pm25")
-    co2         = sensor_row.get("co2")
-    temperature = sensor_row.get("temperature")
-    humidity    = sensor_row.get("humidity")
-    timestamp   = sensor_row["timestamp"]
+    # Use validated temp/hum for ML features too (gives better predictions)
+    temp_val, hum_val = _get_valid_temp_hum(supabase, device_id, sensor_row)
 
-    raw_aqi   = pm25_to_aqi(pm25)
-    raw_cat   = aqi_to_category(raw_aqi)
+    pm25      = sensor_row.get("pm25")
+    co2       = sensor_row.get("co2")
+    timestamp = sensor_row["timestamp"]
+
+    raw_aqi = pm25_to_aqi(pm25)
+    raw_cat = aqi_to_category(raw_aqi)
 
     model, meta = _load_ml_model()
     if model is not None:
@@ -319,11 +421,22 @@ def get_prediction(device_id: str) -> dict:
             X = pd.DataFrame([{
                 "pm25":        pm25,
                 "co2":         co2,
-                "temperature": temperature,
-                "humidity":    humidity,
+                "temperature": temp_val,
+                "humidity":    hum_val,
             }])
             ml_aqi = int(np.clip(round(float(model.predict(X)[0])), 0, 500))
             ml_cat = aqi_to_category(ml_aqi)
+            model_version = meta.get("version", "ridge-v1")
+
+            _persist_ml_prediction(
+                supabase=supabase,
+                reading_id=sensor_row.get("reading_id"),
+                predicted_aqi=ml_aqi,
+                predicted_category=ml_cat,
+                model_version=model_version,
+                raw_aqi=raw_aqi,
+            )
+
             return {
                 "reading_id":          sensor_row.get("reading_id"),
                 "timestamp":           timestamp,
@@ -333,10 +446,10 @@ def get_prediction(device_id: str) -> dict:
                 "ml_category":         ml_cat,
                 "final_aqi":           ml_aqi,
                 "final_category":      ml_cat,
-                "calibration_model":   meta.get("version", "ridge-v1"),
+                "calibration_model":   model_version,
                 "model_mae":           meta.get("mae"),
                 "model_r2":            meta.get("r2"),
-                "features_used":       {"pm25": pm25, "co2": co2, "temperature": temperature, "humidity": humidity},
+                "features_used":       {"pm25": pm25, "co2": co2, "temperature": temp_val, "humidity": hum_val},
                 "ml_available":        True,
             }
         except Exception as exc:
@@ -355,6 +468,74 @@ def get_prediction(device_id: str) -> dict:
         "calibration_model": "cpcb-formula",
         "model_mae":         None,
         "model_r2":          None,
-        "features_used":     {"pm25": pm25, "co2": co2, "temperature": temperature, "humidity": humidity},
+        "features_used":     {"pm25": pm25, "co2": co2, "temperature": temp_val, "humidity": hum_val},
         "ml_available":      False,
+    }
+
+
+# ─── Device Notification Endpoints ───────────────────────────────────────────
+
+@app.post("/api/devices/{device_id}/notify-on")
+def notify_device_powered_on(device_id: str) -> dict[str, str]:
+    """
+    Called by firmware on boot to send SMS notification.
+    Retrieves device name and triggers Twilio SMS.
+    """
+    supabase = get_supabase_client()
+
+    # Fetch device name
+    try:
+        device_resp = (
+            supabase.table("devices")
+            .select("device_name")
+            .eq("device_id", device_id)
+            .limit(1)
+            .execute()
+        )
+        device_row = maybe_single_row(device_resp.data or [])
+        device_name = (device_row or {}).get("device_name") or "IoT Device"
+    except Exception as exc:
+        print(f"[notify-on] Failed to fetch device name: {exc}", file=sys.stderr)
+        device_name = "IoT Device"
+
+    # Send SMS
+    success = notify_device_on(device_name)
+
+    return {
+        "status": "success" if success else "skipped",
+        "message": "SMS sent" if success else "Twilio not configured",
+        "device_name": device_name,
+    }
+
+
+@app.post("/api/devices/{device_id}/notify-off")
+def notify_device_powered_off(device_id: str) -> dict[str, str]:
+    """
+    Called when device goes offline to send SMS notification.
+    Can be triggered by frontend, backend scheduler, or firmware on shutdown.
+    """
+    supabase = get_supabase_client()
+
+    # Fetch device name
+    try:
+        device_resp = (
+            supabase.table("devices")
+            .select("device_name")
+            .eq("device_id", device_id)
+            .limit(1)
+            .execute()
+        )
+        device_row = maybe_single_row(device_resp.data or [])
+        device_name = (device_row or {}).get("device_name") or "IoT Device"
+    except Exception as exc:
+        print(f"[notify-off] Failed to fetch device name: {exc}", file=sys.stderr)
+        device_name = "IoT Device"
+
+    # Send SMS
+    success = notify_device_off(device_name)
+
+    return {
+        "status": "success" if success else "skipped",
+        "message": "SMS sent" if success else "Twilio not configured",
+        "device_name": device_name,
     }

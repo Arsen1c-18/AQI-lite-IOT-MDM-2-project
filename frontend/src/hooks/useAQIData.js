@@ -4,11 +4,14 @@ import { getDeviceId, isValidDeviceId } from '../utils/deviceSettings';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
-export const useAQIData = () => {
+/**
+ * @param {number} historyHours  How many hours of historical data to fetch (default 24).
+ */
+export const useAQIData = (historyHours = 24) => {
   const [latestData,     setLatestData]     = useState(null);
   const [historicalData, setHistoricalData] = useState([]);
   const [deviceInfo,     setDeviceInfo]     = useState(null);
-  const [mlPrediction,   setMlPrediction]   = useState(null);   // NEW: ML inference result
+  const [mlPrediction,   setMlPrediction]   = useState(null);
   const [loading,        setLoading]        = useState(true);
   const [error,          setError]          = useState(null);
 
@@ -43,7 +46,6 @@ export const useAQIData = () => {
       setError(null);
     } catch (err) {
       console.error('[useAQIData] fetchLatestData error:', err.message);
-      // 404 means device exists but no readings yet — not a hard error
       if (err.message.includes('404') || err.message.toLowerCase().includes('no readings')) {
         setLatestData(null);
         setDeviceInfo(null);
@@ -56,21 +58,23 @@ export const useAQIData = () => {
     }
   }, [fetchJson]);
 
-  // ── Historical data (last 24 h) ────────────────────────────────────────────
+  // ── Historical data ────────────────────────────────────────────────────────
   const fetchHistoricalData = useCallback(async () => {
     const DEVICE_ID = getDeviceId();
     if (!isValidDeviceId(DEVICE_ID)) return;
 
     try {
-      const payload = await fetchJson(`/api/devices/${encodeURIComponent(DEVICE_ID)}/history?hours=24`);
+      const payload = await fetchJson(
+        `/api/devices/${encodeURIComponent(DEVICE_ID)}/history?hours=${historyHours}`
+      );
       setHistoricalData(payload?.data || []);
     } catch (err) {
       console.error('[useAQIData] fetchHistoricalData error:', err.message);
       setHistoricalData([]);
     }
-  }, [fetchJson]);
+  }, [fetchJson, historyHours]);
 
-  // ── ML Prediction (best available: Ridge model or CPCB fallback) ───────────
+  // ── ML Prediction ──────────────────────────────────────────────────────────
   const fetchMlPrediction = useCallback(async () => {
     const DEVICE_ID = getDeviceId();
     if (!isValidDeviceId(DEVICE_ID)) return;
@@ -79,7 +83,6 @@ export const useAQIData = () => {
       const payload = await fetchJson(`/api/devices/${encodeURIComponent(DEVICE_ID)}/predict`);
       setMlPrediction(payload);
     } catch (err) {
-      // Predict endpoint failing is non-critical — silently ignore
       console.warn('[useAQIData] fetchMlPrediction error (non-fatal):', err.message);
       setMlPrediction(null);
     }
@@ -91,12 +94,12 @@ export const useAQIData = () => {
     fetchHistoricalData();
     fetchMlPrediction();
 
-    // Poll every 20s for live updates
+    // Poll every 30s for live updates
     const interval = setInterval(() => {
       fetchLatestData();
       fetchHistoricalData();
       fetchMlPrediction();
-    }, 20 * 1000);
+    }, 30 * 1000);
 
     return () => clearInterval(interval);
   }, [fetchLatestData, fetchHistoricalData, fetchMlPrediction]);

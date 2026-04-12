@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import AQIHero from '../components/AQIHero';
 import SensorGrid from '../components/SensorGrid';
@@ -22,10 +22,17 @@ function Dashboard() {
     return null;
   }, [historicalData]);
 
-  const isOnline = useMemo(() => {
-    if (!deviceInfo?.last_seen) return false;
-    const diffMin = (new Date() - new Date(deviceInfo.last_seen)) / 1000 / 60;
-    return diffMin < 10;
+  const [isOnline, setIsOnline] = useState(false);
+  useEffect(() => {
+    const tick = () => {
+      if (!deviceInfo?.last_seen) { setIsOnline(false); return; }
+      // Math.abs handles ESP32 clock drift where timestamps may be slightly future-dated
+      const diffSec = Math.abs((Date.now() - new Date(deviceInfo.last_seen).getTime()) / 1000);
+      setIsOnline(diffSec < 900); // 15 min — covers 10-min send interval
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
   }, [deviceInfo]);
 
   if (loading) {
@@ -133,7 +140,7 @@ function Dashboard() {
 
         {/* Sensor Grid */}
         <div className="w-full">
-          <SensorGrid data={latestData} />
+          <SensorGrid data={latestData} historicalData={historicalData} />
         </div>
 
         {/* Historical Chart */}

@@ -8,12 +8,20 @@ class Settings(BaseSettings):
     supabase_service_role_key: str = Field(alias="SUPABASE_SERVICE_ROLE_KEY")
     allowed_origins: str = Field(default="http://localhost:5173", alias="ALLOWED_ORIGINS")
     default_history_hours: int = Field(default=24, alias="DEFAULT_HISTORY_HOURS")
+    twilio_account_sid: str = Field(default="", alias="TWILIO_ACCOUNT_SID")
+    twilio_auth_token: str = Field(default="", alias="TWILIO_AUTH_TOKEN")
+    twilio_phone_from: str = Field(default="", alias="TWILIO_PHONE_FROM")
+    twilio_phone_to: str = Field(default="", alias="TWILIO_PHONE_TO")
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     @property
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.allowed_origins.split(",") if origin.strip()]
+
+    @property
+    def twilio_enabled(self) -> bool:
+        return bool(self.twilio_account_sid and self.twilio_auth_token and self.twilio_phone_from and self.twilio_phone_to)
 
 
 @lru_cache(maxsize=1)

@@ -16,6 +16,9 @@ const char* SUPABASE_URL      = "";  //  CHANGE THIS
 const char* SUPABASE_ANON_KEY = "";                
 const char* DEVICE_ID         = "";             //  CHANGE THIS
 
+// Backend API (for notifications)
+const char* BACKEND_API_URL   = "http://localhost:8000";  // CHANGE THIS if hosted elsewhere
+
 // ═══════════════════════════════════════════════════════════
 //  PIN DEFINITIONS - Your Current Setup
 // ═══════════════════════════════════════════════════════════
@@ -84,8 +87,9 @@ void setup() {
   Serial.println("\n Warming up MQ135 sensor (30 seconds)...");
   delay(30000);
 
-  // Log device boot
+  // Log device boot and send SMS notification
   logDeviceStatus("ON", "device_boot");
+  notifyDeviceOn();
 
   Serial.println(" System ready!");
   Serial.println("========================================\n");
@@ -276,7 +280,7 @@ void readAndSendSensorData() {
 //  SEND DATA TO SUPABASE VIA REST API
 // ═══════════════════════════════════════════════════════════
 
-void sendToSupabase(float pm25, float co2, float temp, float humidity) {
+void sendToSupabase(float pm25, float co2, float temp, float humidity){
 
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println(" WiFi not connected! Cannot send data.");
@@ -383,4 +387,35 @@ void logDeviceStatus(String status, String reason) {
 
   Serial.print(" Device Status Logged: ");
   Serial.println(status);
+}
+
+
+// ═══════════════════════════════════════════════════════════
+//  SEND TWILIO SMS NOTIFICATION (Power On)
+// ═══════════════════════════════════════════════════════════
+
+void notifyDeviceOn() {
+
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println(" WiFi not connected. Skipping SMS notification.");
+    return;
+  }
+
+  HTTPClient http;
+
+  String url = String(BACKEND_API_URL) + "/api/devices/" + String(DEVICE_ID) + "/notify-on";
+
+  http.begin(url);
+  http.addHeader("Content-Type", "application/json");
+
+  int httpCode = http.POST("");
+
+  if (httpCode > 0) {
+    Serial.print("📱 SMS Notification (ON): HTTP ");
+    Serial.println(httpCode);
+  } else {
+    Serial.println("⚠️  SMS Notification (ON) failed");
+  }
+
+  http.end();
 }

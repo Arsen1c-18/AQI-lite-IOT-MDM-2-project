@@ -39,9 +39,13 @@ const DeviceStatus = ({ lastSeen, deviceName, isOnline }) => {
           </p>
         </div>
         
-        <div className={`px-3 py-1 rounded-full text-xs font-medium border flex items-center gap-1.5 ${isOnline ? 'bg-success/10 text-success border-success/20' : 'bg-text-secondary/10 text-text-secondary border-text-secondary/20'}`}>
+        <div className={`px-3 py-1 rounded-full text-xs font-medium border flex items-center gap-1.5 ${
+          isOnline
+            ? 'bg-success/10 text-success border-success/20'
+            : 'bg-red-50 text-red-600 border-red-200'
+        }`}>
           {isOnline ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
-          <span>{isOnline ? 'Online' : 'Offline'}</span>
+          <span>{isOnline ? 'Online' : 'Monitoring Off'}</span>
         </div>
       </div>
 

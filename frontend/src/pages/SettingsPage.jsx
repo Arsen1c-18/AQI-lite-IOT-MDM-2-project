@@ -11,6 +11,14 @@ import {
 } from '../utils/deviceSettings';
 import { isSupabaseConfigured } from '../supabaseClient';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
+const csvValue = (value) => {
+  if (value === null || value === undefined) return '';
+  const text = String(value).replace(/"/g, '""');
+  return /[",\n]/.test(text) ? `"${text}"` : text;
+};
+
 // ─── Toggle component ─────────────────────────────────────────────────────────
 const SettingToggle = ({ label, desc, storageKey, defaultOn }) => {
   const stored = localStorage.getItem(storageKey);
@@ -64,9 +72,74 @@ const SettingsPage = () => {
     setTimeout(() => setSaveStatus(null), 3000);
   };
 
-  const handleExportCSV = () => {
-    // Placeholder — replace with actual Supabase query + CSV serializer
-    alert('Export CSV: connect to Supabase and query aqi_results for this device.');
+  const handleExportCSV = async () => {
+    const effectiveDeviceId = (deviceId || getDeviceId()).trim();
+
+    if (!isValidDeviceId(effectiveDeviceId)) {
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus(null), 3000);
+      return;
+    }
+
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/api/devices/${encodeURIComponent(effectiveDeviceId)}/history?hours=24`
+      );
+
+      if (!res.ok) {
+        throw new Error(`History fetch failed (${res.status})`);
+      }
+
+      const payload = await res.json();
+      const rows = payload?.data || [];
+
+      if (rows.length === 0) {
+        alert('No readings available for export yet.');
+        return;
+      }
+
+      const headers = [
+        'timestamp',
+        'final_aqi',
+        'raw_aqi',
+        'pm25',
+        'co2',
+        'temperature_c',
+        'humidity',
+        'calibration_model',
+      ];
+
+      const csvLines = [
+        headers.join(','),
+        ...rows.map((row) =>
+          [
+            row.timestamp,
+            row.final_aqi,
+            row.raw_aqi,
+            row.pm25,
+            row.co2,
+            row.temperature,
+            row.humidity,
+            row.calibration_model,
+          ]
+            .map(csvValue)
+            .join(',')
+        ),
+      ];
+
+      const blob = new Blob([csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `aqi-history-${effectiveDeviceId}-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('[SettingsPage] CSV export error:', err);
+      alert('Failed to export CSV. Please check backend connectivity and try again.');
+    }
   };
 
   const handleClearCache = () => {
