@@ -13,19 +13,23 @@ const Recommendations = ({ aqi }) => {
           { icon: Activity, title: 'Safe for outdoor exercise', desc: 'No restrictions for outdoor activities.', color: 'text-success' },
           { icon: Wind, title: 'Open windows', desc: 'Ventilate your home to bring in fresh air.', color: 'text-success' }
         ];
-      case 'Moderate':
+      case 'Satisfactory':
         return [
-          { icon: Activity, title: 'Unusually sensitive individuals', desc: 'Should consider reducing prolonged exertion.', color: 'text-warning' },
+          { icon: Activity, title: 'Sensitive individuals', desc: 'May experience minor breathing discomfort.', color: 'text-success' },
           { icon: Wind, title: 'Ventilation is OK', desc: 'You can open windows but monitor the trends.', color: 'text-text-secondary' }
         ];
-      case 'Unhealthy for Sensitive':
-      case 'Unhealthy':
-      case 'Very Unhealthy':
-      case 'Hazardous':
+      case 'Moderate':
+        return [
+          { icon: Activity, title: 'People with conditions', desc: 'Asthma/heart patients should reduce prolonged exertion.', color: 'text-warning' },
+          { icon: Wind, title: 'Ventilation is OK', desc: 'You can open windows but monitor the trends.', color: 'text-text-secondary' }
+        ];
+      case 'Poor':
+      case 'Very Poor':
+      case 'Severe':
       default:
         return [
           { icon: Shield, title: 'Turn on air purifier', desc: 'Keep windows closed to block pollution.', color: 'text-error' },
-          { icon: Home, title: 'Stay indoors', desc: 'Sensitive groups should avoid exertion outdoor.', color: 'text-error' }
+          { icon: Home, title: 'Stay indoors', desc: 'Everyone should avoid exertion outdoor.', color: 'text-error' }
         ];
     }
   };

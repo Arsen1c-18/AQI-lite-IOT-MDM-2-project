@@ -34,6 +34,8 @@ class HistoricalDataPoint(BaseModel):
     co2: Optional[float]
     temperature: Optional[float]
     humidity: Optional[float]
+    category: Optional[str] = None
+    main_pollutant: Optional[str] = None
 
 
 class HistoricalDataResponse(BaseModel):

@@ -64,7 +64,7 @@ type WebhookPayload = {
 };
 
 type SensorRecord = {
-  reading_id?: string;
+  reading_id?: string | number;  // FIX: accept both string and number (live DB uses bigint)
   device_id?: string;
   pm25?: number | string | null;
   co2?: number | string | null;
@@ -87,6 +87,16 @@ type CalibrationModelJson = {
 function num(v: number | string | null | undefined): number | null {
   if (v === null || v === undefined || v === "") return null;
   const n = typeof v === "number" ? v : parseFloat(String(v));
+  return Number.isFinite(n) ? n : null;
+}
+
+// FIX: Convert reading_id to the correct type for the live DB schema.
+// The live sensor_readings table uses bigint (auto-increment) not UUID.
+// pg_net sends the row as JSON where bigint comes through as a number.
+// This function normalises it to a number so the FK insert matches.
+function normaliseReadingId(id: string | number | undefined): number | null {
+  if (id === undefined || id === null) return null;
+  const n = typeof id === "number" ? id : parseInt(String(id), 10);
   return Number.isFinite(n) ? n : null;
 }
 
@@ -122,16 +132,6 @@ function categoryFromAqi(aqi: number): string {
 }
 
 // ─── Hybrid PM2.5 Physics Correction ─────────────────────────────────────────
-//
-// Why this works:
-//   • Low-cost optical PM sensors over-read at high humidity (water droplets
-//     scatter light like dust). The humidity factor reduces PM25 when RH > 50%.
-//   • At higher ambient temperatures, particle density decreases slightly,
-//     so a small temperature correction is applied around 25°C baseline.
-//
-// This is physically grounded (based on EPA/BAM correction studies) and does
-// not depend on ML training data — making it stable from day one.
-//
 function hybridCorrectPm25(
   pm25: number | null,
   humidity: number | null,
@@ -141,21 +141,17 @@ function hybridCorrectPm25(
 
   let corrected = pm25;
 
-  // Humidity correction: reduce reading when RH > 50%
-  // Factor ranges ~0.80–1.10 for typical indoor RH 30–90%
   if (humidity !== null) {
     const humidityFactor = 1 - 0.02 * (humidity - 50) / 50;
     corrected *= humidityFactor;
   }
 
-  // Temperature correction: slight adjustment around 25°C baseline
-  // Factor ranges ~0.98–1.02 for typical 20–30°C
   if (temperature !== null) {
     const tempFactor = 1 + 0.01 * (temperature - 25) / 25;
     corrected *= tempFactor;
   }
 
-  return Math.max(0, Math.round(corrected * 100) / 100); // clamp ≥ 0, 2dp
+  return Math.max(0, Math.round(corrected * 100) / 100);
 }
 
 // ─── CPCB AQI from two pollutants ────────────────────────────────────────────
@@ -179,7 +175,6 @@ function computeCpcbSide(
 
   const calculated_aqi = Math.max(...parts.map((p) => p.idx));
   const atMax = parts.filter((p) => p.idx === calculated_aqi);
-  // Tie-break: PM2.5 is primary when equal
   const main_pollutant = atMax.some((p) => p.name === "PM2.5")
     ? "PM2.5"
     : atMax[0].name;
@@ -192,8 +187,6 @@ function computeCpcbSide(
 }
 
 // ─── Optional ML Ridge model ──────────────────────────────────────────────────
-// UPDATE AFTER RETRAINING — paste new JSON into secret CALIBRATION_MODEL_JSON
-// (coefficients + scaler.mean/scale + intercept + version from training export)
 function loadCalibrationModel(): CalibrationModelJson | null {
   const raw = Deno.env.get("CALIBRATION_MODEL_JSON");
   if (!raw || !raw.trim()) {
@@ -262,18 +255,22 @@ Deno.serve(async (req: Request) => {
   }
 
   const rec = payload.record as SensorRecord;
-  const readingId = rec.reading_id;
+
+  // FIX: normalise reading_id from bigint (live DB) — was causing 500 on insert
+  // Live sensor_readings.reading_id is bigint auto-increment, not UUID.
+  // JSON serialises bigint as a number; cast it explicitly to avoid type mismatch.
+  const readingId = normaliseReadingId(rec.reading_id);
   const deviceId = rec.device_id;
 
   if (!readingId || !deviceId) {
-    console.warn("[calibrate-aqi] Missing reading_id or device_id");
+    console.warn("[calibrate-aqi] Missing reading_id or device_id", { readingId, deviceId });
     return jsonResponse(400, { error: "record.reading_id and record.device_id are required" });
   }
 
   // ── 1. Extract raw sensor values ───────────────────────────────────────────
-  const rawPm25     = num(rec.pm25);
-  let co2           = num(rec.co2);
-  const humidity    = num(rec.humidity);
+  const rawPm25 = num(rec.pm25);
+  let co2 = num(rec.co2);
+  const humidity = num(rec.humidity);
   const temperature = num(rec.temperature);
 
   // Filter unrealistic CO₂ values (sensor warm-up bug)
@@ -291,9 +288,7 @@ Deno.serve(async (req: Request) => {
   );
 
   // ── 3. Dual AQI computation ───────────────────────────────────────────────
-  // Raw AQI: unmodified baseline from raw PM2.5 — never altered after write
-  const rawAqiData    = computeCpcbSide(rawPm25, co2);
-  // Hybrid AQI: physics-corrected PM2.5 — the recommended display value
+  const rawAqiData = computeCpcbSide(rawPm25, co2);
   const hybridAqiData = computeCpcbSide(correctedPm25, co2);
 
   console.log(
@@ -302,18 +297,12 @@ Deno.serve(async (req: Request) => {
     "| category:", hybridAqiData.category,
   );
 
-  // calculated_aqi = raw baseline (never overwritten, always auditable)
   const calculated_aqi = rawAqiData.calculated_aqi;
-
-  // calibrated_aqi starts as hybrid; ML can override it below
   let calibrated_aqi: number | null = hybridAqiData.calculated_aqi;
   let calibration_model_version: string | null = "hybrid-v1";
-
-  // Category and main pollutant derive from the corrected (hybrid) path
   const { category, main_pollutant } = hybridAqiData;
 
-  // ── 4. Optional ML Ridge inference (overrides calibrated_aqi only) ────────
-  // calculated_aqi (raw baseline) is NEVER touched by ML.
+  // ── 4. Optional ML Ridge inference ────────────────────────────────────────
   const mlModel = loadCalibrationModel();
   if (mlModel) {
     try {
@@ -321,16 +310,16 @@ Deno.serve(async (req: Request) => {
       if (pred) {
         calibrated_aqi = pred.value;
         calibration_model_version = pred.version;
-        console.log("[calibrate-aqi] ML override calibrated_aqi:", calibrated_aqi, "version:", calibration_model_version);
+        console.log("[calibrate-aqi] ML override calibrated_aqi:", calibrated_aqi);
       }
     } catch (e) {
-      console.warn("[calibrate-aqi] ML inference failed — retaining hybrid_aqi as calibrated_aqi:", e);
+      console.warn("[calibrate-aqi] ML inference failed — retaining hybrid_aqi:", e);
     }
   }
 
   // ── 5. Supabase client ────────────────────────────────────────────────────
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-  const serviceKey  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
   if (!supabaseUrl || !serviceKey) {
     console.error("[calibrate-aqi] Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
     return jsonResponse(500, { error: "Server misconfiguration" });
@@ -338,11 +327,12 @@ Deno.serve(async (req: Request) => {
   const supabase = createClient(supabaseUrl, serviceKey);
 
   // ── 6. Idempotency check ──────────────────────────────────────────────────
+  // FIX: use normalised number readingId not raw string
   console.log("[calibrate-aqi] Idempotency check for reading_id:", readingId);
   const { data: existing, error: exErr } = await supabase
     .from("aqi_results")
     .select("result_id")
-    .eq("reading_id", readingId)
+    .eq("reading_id", readingId)   // FIX: readingId is now a number matching bigint
     .maybeSingle();
 
   if (exErr) {
@@ -358,18 +348,49 @@ Deno.serve(async (req: Request) => {
     ? rec.timestamp
     : new Date().toISOString();
 
-  // ── 7. Insert result row ──────────────────────────────────────────────────
+  // ── 7. Compute SMOOTHED AQI (NEW) ─────────────────────────────────────────
+
+  // Fetch last 5 AQI readings
+  const { data: prevRows } = await supabase
+    .from("aqi_results")
+    .select("calibrated_aqi")
+    .eq("device_id", deviceId)
+    .order("timestamp", { ascending: false })
+    .limit(5);
+
+  let smoothed_aqi = calibrated_aqi;
+
+  if (prevRows && prevRows.length > 0 && calibrated_aqi !== null) {
+    const values = prevRows
+      .map((r) => r.calibrated_aqi)
+      .filter((v) => v !== null);
+
+    if (values.length > 0) {
+      const avg = values.reduce((sum, v) => sum + v, 0) / values.length;
+
+      // Weighted smoothing (better than simple average)
+      smoothed_aqi = Math.round(0.6 * calibrated_aqi + 0.4 * avg);
+    }
+  }
+
+  console.log(
+    "[calibrate-aqi] Smoothed AQI:",
+    smoothed_aqi,
+    "| Raw:", calibrated_aqi
+  );
+
+  // ── 8. Insert result row ──────────────────────────────────────────────────
   const insertRow = {
-    reading_id,
-    device_id:                 deviceId,
-    // Dual-AQI: raw baseline preserved, hybrid/ML goes to calibrated
-    calculated_aqi,            // RAW AQI — from raw PM2.5, never modified
-    calibrated_aqi,            // HYBRID AQI — physics-corrected (or ML override)
-    corrected_pm25:            correctedPm25,
-    category,                  // from hybrid path (more accurate)
+    reading_id: readingId,
+    device_id: deviceId,
+    calculated_aqi,
+    calibrated_aqi,
+    smoothed_aqi,
+    corrected_pm25: correctedPm25,
+    category,
     main_pollutant,
-    calibration_model_version, // 'hybrid-v1' | 'ridge-v1'
-    timestamp:                 ts,
+    calibration_model_version,
+    timestamp: ts,
   };
 
   console.log("[calibrate-aqi] Inserting aqi_results:", JSON.stringify(insertRow));
@@ -386,11 +407,11 @@ Deno.serve(async (req: Request) => {
 
   console.log("[calibrate-aqi] Success");
   return jsonResponse(200, {
-    success:                   true,
-    raw_pm25:                  rawPm25,
-    corrected_pm25:            correctedPm25,
-    calculated_aqi,            // raw AQI
-    calibrated_aqi,            // hybrid/ML AQI
+    success: true,
+    raw_pm25: rawPm25,
+    corrected_pm25: correctedPm25,
+    calculated_aqi,
+    calibrated_aqi,
     calibration_model_version,
   });
 });

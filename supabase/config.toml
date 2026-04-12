@@ -7,7 +7,7 @@
 # NOTE: migrations should live in supabase/migrations/ not backend/
 
 [api]
-project_id = "sniaiplxtkbmdcfdnpmo"
+# project_id = "sniaiplxtkbmdcfdnpmo"
 
 [db]
 port = 54322

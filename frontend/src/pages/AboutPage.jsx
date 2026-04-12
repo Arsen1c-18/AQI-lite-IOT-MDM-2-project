@@ -77,12 +77,12 @@ const AboutPage = () => {
               AQI Lite computes a simplified AQI from PM2.5 particulate matter readings on your ESP32.
             </p>
             <div className="space-y-0 divide-y divide-green-50">
-              <AQIRow range="0 – 50" cat="Good" color="bg-green-500" desc="Air quality is satisfactory. No health risk." />
-              <AQIRow range="51 – 100" cat="Moderate" color="bg-yellow-400" desc="Acceptable. Sensitive individuals may be affected." />
-              <AQIRow range="101 – 150" cat="Unhealthy (Sensitive)" color="bg-orange-400" desc="Sensitive groups may experience health effects." />
-              <AQIRow range="151 – 200" cat="Unhealthy" color="bg-red-500" desc="Everyone may begin to experience effects." />
-              <AQIRow range="201 – 300" cat="Very Unhealthy" color="bg-purple-600" desc="Health alert for the general population." />
-              <AQIRow range="301+" cat="Hazardous" color="bg-rose-900" desc="Emergency health warning. Stay indoors." />
+              <AQIRow range="0 – 50" cat="Good" color="bg-[#00e400]" desc="Minimal impact" />
+              <AQIRow range="51 – 100" cat="Satisfactory" color="bg-[#9cff00]" desc="Minor breathing discomfort to sensitive people" />
+              <AQIRow range="101 – 200" cat="Moderate" color="bg-[#ffff00]" desc="Breathing discomfort to people with lung, asthma and heart diseases" />
+              <AQIRow range="201 – 300" cat="Poor" color="bg-[#ff7e00]" desc="Breathing discomfort to most people on prolonged exposure" />
+              <AQIRow range="301 – 400" cat="Very Poor" color="bg-[#ff0000]" desc="Respiratory illness on prolonged exposure" />
+              <AQIRow range="401+" cat="Severe" color="bg-[#8f3f97]" desc="Affects healthy people and seriously impacts those with existing diseases" />
             </div>
           </div>
         </Section>

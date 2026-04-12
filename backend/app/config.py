@@ -1,6 +1,10 @@
 from functools import lru_cache
+from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Resolve .env relative to this file's directory (immune to CWD changes)
+_ENV_FILE = Path(__file__).parent.parent / ".env"
 
 
 class Settings(BaseSettings):
@@ -13,7 +17,11 @@ class Settings(BaseSettings):
     twilio_phone_from: str = Field(default="", alias="TWILIO_PHONE_FROM")
     twilio_phone_to: str = Field(default="", alias="TWILIO_PHONE_TO")
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=str(_ENV_FILE),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     @property
     def cors_origins(self) -> list[str]:
@@ -21,9 +29,15 @@ class Settings(BaseSettings):
 
     @property
     def twilio_enabled(self) -> bool:
-        return bool(self.twilio_account_sid and self.twilio_auth_token and self.twilio_phone_from and self.twilio_phone_to)
+        return bool(
+            self.twilio_account_sid
+            and self.twilio_auth_token
+            and self.twilio_phone_from
+            and self.twilio_phone_to
+        )
 
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()
+
