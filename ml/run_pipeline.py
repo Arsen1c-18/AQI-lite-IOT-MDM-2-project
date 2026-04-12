@@ -60,6 +60,19 @@ def run_py(args: list[str]) -> None:
 
 
 def main() -> None:
+    def check_dependencies():
+        missing = []
+        for pkg in ['pandas', 'numpy', 'sklearn', 'requests', 'joblib']:
+            try:
+                __import__(pkg)
+            except ImportError:
+                missing.append(pkg)
+        if missing:
+            print(f'[pipeline] Missing dependencies: {missing}')
+            print('[pipeline] Run: pip install -r requirements.txt')
+            sys.exit(1)
+
+    check_dependencies()
     load_dotenv_if_present(ML_DIR / ".env")
 
     supabase_url = os.environ.get("SUPABASE_URL", "").strip()
@@ -88,27 +101,13 @@ def main() -> None:
     rows_backfilled = 0
     mae = rmse = r2 = None
 
-    print("=== Step 1: fetch_cpcb (Nagpur, 30 days) ===")
-    try:
-        run_py(
-            [
-                "fetch_cpcb.py",
-                "--city",
-                "Nagpur",
-                "--days",
-                "30",
-                "--out",
-                str(CPCB_CSV.relative_to(ML_DIR)),
-            ]
-        )
-    except subprocess.CalledProcessError:
-        die_step("fetch_cpcb.py")
-
+    # We expect CPCB data to have been generated manually via convert_cpcb.py
+    # and placed at data/cpcb_reference.csv.
     rows_fetched = csv_data_rows(CPCB_CSV)
     if rows_fetched < 1:
-        die_step("fetch_cpcb.py (no CPCB data rows in CSV)")
+        die_step("Missing CPCB Reference Data. Run 'python convert_cpcb.py' first.", 1)
 
-    print("\n=== Step 2: build_features (Supabase + CPCB join) ===")
+    print("\n=== Step 1: build_features (Supabase + CPCB join) ===")
     try:
         run_py(
             [
@@ -130,7 +129,7 @@ def main() -> None:
 
     rows_matched = csv_data_rows(FEATURES_CSV)
 
-    print("\n=== Step 3: row count gate (need >= 20 matched hourly rows) ===")
+    print("\n=== Step 2: row count gate (need >= 20 matched hourly rows) ===")
     if rows_matched < 20:
         print()
         print(
@@ -142,7 +141,7 @@ def main() -> None:
         )
         sys.exit(1)
 
-    print("\n=== Step 4: train_calibration train ===")
+    print("\n=== Step 3: train_calibration train ===")
     try:
         run_py(["train_calibration.py", "train", "--features", str(FEATURES_CSV.relative_to(ML_DIR))])
     except subprocess.CalledProcessError:
@@ -168,7 +167,7 @@ def main() -> None:
         confirm = "n"
 
     if confirm in ("y", "yes"):
-        print("\n=== Step 5: train_calibration backfill ===")
+        print("\n=== Step 4: train_calibration backfill ===")
         cmd = [
             sys.executable,
             "train_calibration.py",

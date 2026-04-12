@@ -49,10 +49,11 @@ const HistoryPage = () => {
   const chartData = useMemo(() => {
     if (!historicalData) return [];
     return historicalData.map(item => ({
-      time: new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      AQI: item.final_aqi,
-      PM25: item.pm25 ? parseFloat(item.pm25.toFixed(1)) : null,
-      CO2: item.co2 ? parseFloat(item.co2.toFixed(0)) : null,
+      time:   new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      AQI:    item.final_aqi,          // hybrid-corrected (primary display)
+      RawAQI: item.raw_aqi ?? null,    // unmodified baseline for comparison
+      PM25:   item.pm25 ? parseFloat(item.pm25.toFixed(1)) : null,
+      CO2:    item.co2  ? parseFloat(item.co2.toFixed(0))  : null,
     }));
   }, [historicalData]);
 
@@ -131,6 +132,10 @@ const HistoryPage = () => {
                     <stop offset="5%" stopColor="#16a34a" stopOpacity={0.25} />
                     <stop offset="95%" stopColor="#16a34a" stopOpacity={0} />
                   </linearGradient>
+                  <linearGradient id="gradRawAQI" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.12} />
+                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                  </linearGradient>
                   <linearGradient id="gradPM" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#ef4444" stopOpacity={0.2} />
                     <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
@@ -142,10 +147,13 @@ const HistoryPage = () => {
                 <Tooltip content={<CustomTooltip />} />
                 <Legend wrapperStyle={{ fontSize: '13px', paddingTop: '16px' }} />
                 {(activeMetric === 'all' || activeMetric === 'AQI') && (
-                  <Area type="monotone" dataKey="AQI" stroke="#16a34a" strokeWidth={2.5} fill="url(#gradAQI)" dot={false} activeDot={{ r: 4, fill: '#16a34a' }} animationDuration={1200} />
+                  <>
+                    <Area type="monotone" dataKey="AQI" name="Hybrid AQI" stroke="#16a34a" strokeWidth={2.5} fill="url(#gradAQI)" dot={false} activeDot={{ r: 4, fill: '#16a34a' }} animationDuration={1200} />
+                    <Area type="monotone" dataKey="RawAQI" name="Raw AQI" stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="5 3" fill="url(#gradRawAQI)" dot={false} animationDuration={1200} />
+                  </>
                 )}
                 {(activeMetric === 'all' || activeMetric === 'PM25') && (
-                  <Area type="monotone" dataKey="PM25" stroke="#ef4444" strokeWidth={2} fill="url(#gradPM)" dot={false} activeDot={{ r: 4 }} animationDuration={1200} />
+                  <Area type="monotone" dataKey="PM25" name="PM2.5" stroke="#ef4444" strokeWidth={2} fill="url(#gradPM)" dot={false} activeDot={{ r: 4 }} animationDuration={1200} />
                 )}
               </AreaChart>
             </ResponsiveContainer>

@@ -1,0 +1,43 @@
+{
+  "version": "ridge-v1",
+  "trained_at": "2026-04-11T14:36:06.704613+00:00",
+  "n_train": 46,
+  "n_test": 12,
+  "alpha": 1.0,
+  "features": [
+    "pm25",
+    "co2",
+    "temperature",
+    "humidity"
+  ],
+  "mae": 34.172,
+  "rmse": 36.107,
+  "r2": 0.3201,
+  "coefficients": {
+    "pm25": -4.5384,
+    "co2": -0.185,
+    "temperature": 12.1367,
+    "humidity": 17.9813
+  },
+  "intercept": 117.3913,
+  "scaler": {
+    "mean": {
+      "pm25": 130.302207,
+      "co2": 2151.139799,
+      "temperature": 28.476725,
+      "humidity": 39.473579
+    },
+    "scale": {
+      "pm25": 29.583239,
+      "co2": 351.920696,
+      "temperature": 2.901951,
+      "humidity": 8.798844
+    }
+  },
+  "imputer_medians": {
+    "pm25": 132.37,
+    "co2": 2081.0,
+    "temperature": 28.241667,
+    "humidity": 41.083333
+  }
+}

@@ -1,0 +1,33 @@
+# Supabase Config File
+# This file links the local environment to the remote Supabase project.
+#
+# NOTE: verify_jwt = false is intentional for the calibrate-aqi webhook trigger
+# because the Postgres trigger calls it using the anon key, not a user JWT.
+#
+# NOTE: migrations should live in supabase/migrations/ not backend/
+
+[api]
+project_id = "sniaiplxtkbmdcfdnpmo"
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[studio]
+port = 54323
+
+[inbucket]
+port = 54324
+
+[storage]
+file_size_limit = "50MiB"
+
+[auth]
+site_url = "http://localhost:5173"
+additional_redirect_urls = []
+jwt_expiry = 3600
+enable_signup = true
+
+[functions.calibrate-aqi]
+verify_jwt = false

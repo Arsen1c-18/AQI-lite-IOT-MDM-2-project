@@ -130,6 +130,8 @@ def main():
     parser.add_argument('--out',     default='data/cpcb_reference.csv', help='Output CSV path')
     args = parser.parse_args()
 
+    Path('data').mkdir(parents=True, exist_ok=True)
+
     station_id = args.station or CITY_STATION_MAP.get(args.city)
     if not station_id:
         print(f'[fetch_cpcb] Unknown city "{args.city}". Use --station to specify ID directly.')

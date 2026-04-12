@@ -52,6 +52,11 @@ METADATA_PATH = MODEL_DIR / f'calibration_{MODEL_VERSION}_meta.json'
 # ── Training ──────────────────────────────────────────────────────────────────
 
 def train(features_csv: str, alpha: float = 1.0, test_size: float = 0.2):
+    if not Path(features_csv).exists():
+        print('[train] Run build_features.py first to generate data/features.csv')
+        print('[train] Or run the full pipeline: python run_pipeline.py')
+        sys.exit(1)
+        
     df = pd.read_csv(features_csv)
     print(f'[train] Loaded {len(df)} rows from {features_csv}')
 
