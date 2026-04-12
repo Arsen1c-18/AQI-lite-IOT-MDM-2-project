@@ -17,7 +17,7 @@ const char* SUPABASE_ANON_KEY = "";
 const char* DEVICE_ID         = "";             //  CHANGE THIS
 
 // Backend API (for notifications)
-const char* BACKEND_API_URL   = "http://localhost:8000";  // CHANGE THIS if hosted elsewhere
+const char* BACKEND_API_URL   = "http://192.168.1.9:8000";  // Your PC's LAN IP
 
 // ═══════════════════════════════════════════════════════════
 //  PIN DEFINITIONS - Your Current Setup

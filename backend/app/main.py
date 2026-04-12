@@ -473,6 +473,59 @@ def get_prediction(device_id: str) -> dict:
     }
 
 
+# ─── Twilio SMS helpers ───────────────────────────────────────────────────────
+
+def _send_sms(body: str) -> bool:
+    """
+    Send an SMS via Twilio.
+    Returns True on success, False if skipped (not configured) or on error.
+    Silently no-ops if:
+      - Twilio credentials are not set in .env
+      - twilio Python package is not installed
+    """
+    cfg = get_settings()
+    if not cfg.twilio_enabled:
+        print("[twilio] credentials not set — SMS skipped", file=sys.stderr)
+        return False
+
+    try:
+        from twilio.rest import Client  # type: ignore
+        client = Client(cfg.twilio_account_sid, cfg.twilio_auth_token)
+        client.messages.create(
+            body=body,
+            from_=cfg.twilio_phone_from,
+            to=cfg.twilio_phone_to,
+        )
+        print(f"[twilio] SMS sent: {body[:60]}...", file=sys.stderr)
+        return True
+    except ImportError:
+        print("[twilio] package not installed — run: pip install twilio", file=sys.stderr)
+        return False
+    except Exception as exc:
+        print(f"[twilio] SMS send failed: {exc}", file=sys.stderr)
+        return False
+
+
+def notify_device_on(device_name: str) -> bool:
+    """Fire SMS when ESP32 powers on / reconnects."""
+    now = datetime.now(timezone.utc).strftime("%d %b %Y %H:%M UTC")
+    return _send_sms(
+        f"✅ AQI Lite — {device_name} POWERED ON\n"
+        f"Monitoring has started. Live data is being collected.\n"
+        f"Time: {now}"
+    )
+
+
+def notify_device_off(device_name: str) -> bool:
+    """Fire SMS when ESP32 goes offline."""
+    now = datetime.now(timezone.utc).strftime("%d %b %Y %H:%M UTC")
+    return _send_sms(
+        f"🔴 AQI Lite — {device_name} POWERED OFF\n"
+        f"Device is offline. Monitoring has stopped.\n"
+        f"Time: {now}"
+    )
+
+
 # ─── Device Notification Endpoints ───────────────────────────────────────────
 
 @app.post("/api/devices/{device_id}/notify-on")
