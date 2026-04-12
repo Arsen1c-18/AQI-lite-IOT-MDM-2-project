@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import Layout from '../components/Layout';
 import AQIHero from '../components/AQIHero';
 import SensorGrid from '../components/SensorGrid';
@@ -9,6 +9,11 @@ import { useAQIData } from '../hooks/useAQIData';
 import { useRealtime } from '../hooks/useRealtime';
 import { AlertTriangle, Wifi, RefreshCw } from 'lucide-react';
 import { motion } from 'framer-motion';
+
+const API_BASE   = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const DEVICE_ID  = import.meta.env.VITE_DEVICE_ID;
+// Minimum gap between notify-off SMS calls (60 s during testing)
+const NOTIFY_COOLDOWN_MS = 60 * 1000;
 
 function Dashboard() {
   const { latestData, historicalData, deviceInfo, mlPrediction, loading, error, refetch } = useAQIData();
@@ -28,12 +33,35 @@ function Dashboard() {
       if (!deviceInfo?.last_seen) { setIsOnline(false); return; }
       // Math.abs handles ESP32 clock drift where timestamps may be slightly future-dated
       const diffSec = Math.abs((Date.now() - new Date(deviceInfo.last_seen).getTime()) / 1000);
-      setIsOnline(diffSec < 900); // 15 min — covers 10-min send interval
+      setIsOnline(diffSec < 30); // 30 s — for testing
     };
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [deviceInfo]);
+
+  // ── Notify-off: fire SMS when device transitions online → offline ──────────
+  const prevOnlineRef    = useRef(null); // null = unknown (first render)
+  const lastNotifyOffRef = useRef(0);    // timestamp of last notify-off call
+
+  useEffect(() => {
+    const wasOnline = prevOnlineRef.current;
+    prevOnlineRef.current = isOnline;
+
+    // Only react to a true → false transition (skip initial null state)
+    if (wasOnline === true && isOnline === false && DEVICE_ID) {
+      const now = Date.now();
+      if (now - lastNotifyOffRef.current >= NOTIFY_COOLDOWN_MS) {
+        lastNotifyOffRef.current = now;
+        fetch(`${API_BASE}/api/devices/${encodeURIComponent(DEVICE_ID)}/notify-off`, {
+          method: 'POST',
+        })
+          .then(r => r.json())
+          .then(d => console.log('[notify-off]', d.message))
+          .catch(e => console.warn('[notify-off] failed:', e));
+      }
+    }
+  }, [isOnline]);
 
   if (loading) {
     return (

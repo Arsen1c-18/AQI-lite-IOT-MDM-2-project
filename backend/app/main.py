@@ -23,7 +23,9 @@ latest row is out of range, the backend scans the last 30 rows and returns
 the most recently captured VALID value.
 """
 
+import asyncio
 import sys
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -41,7 +43,73 @@ from .supabase_service import get_supabase_client, maybe_single_row
 from .twilio_service import notify_device_on, notify_device_off
 
 settings = get_settings()
-app = FastAPI(title="AQI Lite Backend", version="3.0.0")
+
+# ─── Device offline watcher ───────────────────────────────────────────────────
+# Tracks per-device online state in memory so we can detect true→false flips.
+_device_was_online: dict[str, bool] = {}
+
+# How long since last reading before device is considered offline (seconds)
+OFFLINE_THRESHOLD_SEC = 30   # ← change to 900 (15 min) for production
+WATCHER_INTERVAL_SEC  = 15   # how often the watcher polls
+
+
+async def _device_offline_watcher() -> None:
+    """Background task: checks device last_seen every WATCHER_INTERVAL_SEC seconds.
+    Fires notify-off SMS when the device transitions online → offline."""
+    device_id = settings.device_id
+    if not device_id:
+        print("[watcher] VITE_DEVICE_ID / DEVICE_ID not set — watcher disabled.", file=sys.stderr)
+        return
+
+    print(f"[watcher] Started. Monitoring device {device_id} (threshold={OFFLINE_THRESHOLD_SEC}s)", flush=True)
+
+    while True:
+        await asyncio.sleep(WATCHER_INTERVAL_SEC)
+        try:
+            supabase = get_supabase_client()
+            resp = (
+                supabase.table("sensor_readings")
+                .select("timestamp")
+                .eq("device_id", device_id)
+                .order("timestamp", desc=True)
+                .limit(1)
+                .execute()
+            )
+            row = maybe_single_row(resp.data or [])
+            last_seen_str = (row or {}).get("timestamp")
+
+            if last_seen_str:
+                last_seen = datetime.fromisoformat(last_seen_str.replace("Z", "+00:00"))
+                diff_sec = abs((datetime.now(timezone.utc) - last_seen).total_seconds())
+                is_online = diff_sec < OFFLINE_THRESHOLD_SEC
+            else:
+                is_online = False
+
+            was_online = _device_was_online.get(device_id)  # None on first run
+            _device_was_online[device_id] = is_online
+
+            if was_online is True and not is_online:
+                print(f"[watcher] Device {device_id} went OFFLINE → sending SMS", flush=True)
+                notify_device_off(device_id)  # reuses device name lookup internally
+            elif was_online is False and is_online:
+                print(f"[watcher] Device {device_id} is back ONLINE", flush=True)
+
+        except Exception as exc:
+            print(f"[watcher] Error: {exc}", file=sys.stderr)
+
+
+@asynccontextmanager
+async def lifespan(app_instance):
+    task = asyncio.create_task(_device_offline_watcher())
+    yield
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+
+app = FastAPI(title="AQI Lite Backend", version="3.0.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins or ["*"],

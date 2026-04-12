@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     twilio_auth_token: str = Field(default="", alias="TWILIO_AUTH_TOKEN")
     twilio_phone_from: str = Field(default="", alias="TWILIO_PHONE_FROM")
     twilio_phone_to: str = Field(default="", alias="TWILIO_PHONE_TO")
+    device_id: str = Field(default="", alias="DEVICE_ID")
 
     model_config = SettingsConfigDict(
         env_file=str(_ENV_FILE),
